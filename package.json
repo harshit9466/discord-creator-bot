@@ -1,0 +1,25 @@
+{
+  "name": "discord-creator-bot",
+  "version": "1.0.0",
+  "description": "Creator program bot — feed, profiles, and community tools for the server's creator role",
+  "main": "src/index.js",
+  "scripts": {
+    "start": "node src/index.js",
+    "dev": "nodemon src/index.js",
+    "deploy-commands": "node src/deploy-commands.js"
+  },
+  "dependencies": {
+    "discord.js": "^14.26.4",
+    "dotenv": "^16.4.5",
+    "knex": "^3.1.0",
+    "pg": "^8.21.0",
+    "winston": "^3.13.0"
+  },
+  "devDependencies": {
+    "nodemon": "^3.1.4"
+  },
+  "engines": {
+    "node": ">=20.0.0"
+  },
+  "license": "MIT"
+}

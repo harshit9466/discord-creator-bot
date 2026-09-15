@@ -228,6 +228,17 @@ async function handleModDecision(interaction) {
     const { creator } = member
       ? await creatorSpace.ensureCreatorThread(interaction.guild, member)
       : { creator: await creatorRepo.findOrCreateCreator(application.discord_user_id, application.guild_id) };
+
+    // Real bug, found from an actual re-approval: this never reset creator.status,
+    // so someone previously archived and then re-approved kept status STEPPED_DOWN
+    // forever — they had the role back but the system still considered them
+    // archived, which is also why their thread stayed archived (ensureCreatorThread
+    // found an old thread_id and, before the fix above, returned it as-is).
+    // reactivate() is the same reset statusFlow.reactivate/modPanel.liftSuspension
+    // already use, so this covers a re-approval from ANY prior status, not just
+    // STEPPED_DOWN.
+    await creatorRepo.reactivate(creator.id);
+
     const defaultType = application.content_comfort === 'NSFW' ? 'NSFW' : 'SFW';
     await creatorRepo.setDefaultContentType(creator.id, defaultType);
 

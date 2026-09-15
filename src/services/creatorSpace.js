@@ -30,7 +30,15 @@ async function provisionThread(guild, member) {
 
   if (creator.thread_id) {
     const existing = await guild.channels.fetch(creator.thread_id).catch(() => null);
-    if (existing) return { creator, thread: existing };
+    if (existing) {
+      // A reused thread can be archived — e.g. a creator who was archived and is
+      // now being re-approved still has their old thread_id pointing at a thread
+      // Discord marked archived on the way out. Returning it as-is left it hidden
+      // even though they were, from the outside, "a creator again" — confirmed
+      // directly: real case, thread.archived was true post-reapproval.
+      if (existing.archived) await existing.setArchived(false).catch((err) => logger.warn(`Could not unarchive thread for ${member.id}: ${err.message}`));
+      return { creator, thread: existing };
+    }
   }
 
   const parent = await guild.channels.fetch(config.creatorSpacesChannelId);

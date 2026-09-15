@@ -46,19 +46,7 @@ async function countByCreator(creatorId) {
   return Number(count);
 }
 
-async function toggleLike(postId, discordUserId) {
-  const existing = await db('post_likes').where({ post_id: postId, discord_user_id: discordUserId }).first();
-  if (existing) {
-    await db('post_likes').where({ post_id: postId, discord_user_id: discordUserId }).delete();
-    await db('posts').where({ id: postId }).decrement('like_count', 1);
-    return { liked: false };
-  }
-  await db('post_likes').insert({ post_id: postId, discord_user_id: discordUserId });
-  await db('posts').where({ id: postId }).increment('like_count', 1);
-  return { liked: true };
-}
-
 module.exports = {
-  createPost, setFeedMessageId, getPost, listRecentByCreator, getLastPostDate, toggleLike,
+  createPost, setFeedMessageId, getPost, listRecentByCreator, getLastPostDate,
   getPostAtIndex, countByCreator,
 };

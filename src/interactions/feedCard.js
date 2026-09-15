@@ -15,12 +15,17 @@ function buildFeedCard({ creatorTag, avatarUrl, post }) {
 
 function buildFeedComponents(post) {
   return [new ActionRowBuilder().addComponents(
-    new ButtonBuilder().setCustomId(`like_${post.id}`).setLabel(`${post.like_count}`).setEmoji('❤️').setStyle(ButtonStyle.Secondary),
     new ButtonBuilder().setCustomId(`profile_${post.creator_id}`).setLabel('Profile').setEmoji('👤').setStyle(ButtonStyle.Secondary),
     new ButtonBuilder().setCustomId(`reqstart_${post.id}`).setLabel('Request').setEmoji('📨').setStyle(ButtonStyle.Secondary),
   )];
 }
 
+// Appreciation is a real Discord reaction, not a custom button — a button has no
+// way to show who clicked it (no hover tooltip, no reactor list; that's a native
+// reaction feature Discord's client renders itself, not something bot components
+// can replicate). Adding the seed reaction here means the count and the "who
+// reacted" list are both free — Discord already builds both, correctly, for any
+// message with a reaction on it.
 async function publishPost(guild, { creatorTag, avatarUrl, post }) {
   const channel = await guild.channels.fetch(config.feedChannelId);
   const message = await channel.send({
@@ -28,20 +33,9 @@ async function publishPost(guild, { creatorTag, avatarUrl, post }) {
     components: buildFeedComponents(post),
   });
   await postRepo.setFeedMessageId(post.id, message.id);
+  await message.react('❤️').catch(() => {});
   await message.startThread({ name: `Comments — ${creatorTag}`, autoArchiveDuration: 1440 }).catch(() => {});
   return message;
 }
 
-// deferUpdate() first — two DB calls before the response risk the same
-// interaction-token expiry as applyFlow.start(), just less likely to be noticed
-// since it's usually fast. Better to close the gap than rely on luck.
-async function handleLike(interaction) {
-  await interaction.deferUpdate();
-  const postId = Number(interaction.customId.split('_')[1]);
-  const { liked } = await postRepo.toggleLike(postId, interaction.user.id);
-  const post = await postRepo.getPost(postId);
-  await interaction.editReply({ components: buildFeedComponents(post) });
-  await interaction.followUp({ content: liked ? 'Appreciated! ❤️' : 'Like removed.', ephemeral: true });
-}
-
-module.exports = { buildFeedCard, buildFeedComponents, publishPost, handleLike };
+module.exports = { buildFeedCard, buildFeedComponents, publishPost };

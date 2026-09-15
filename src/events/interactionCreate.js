@@ -64,7 +64,6 @@ function resolveHandler(interaction) {
     if (id.startsWith('modpanel_delete_cancel_')) return modPanel.cancelDelete;
     if (id.startsWith('modpanel_resolve_')) return modPanel.resolveEscalated;
 
-    if (id.startsWith('like_')) return feedCard.handleLike;
     if (id.startsWith('profile_')) return profile.showByCreatorId;
     if (id.startsWith('profilepage_')) return profile.changePage;
 

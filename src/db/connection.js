@@ -50,6 +50,11 @@ async function initDb() {
       t.boolean('requests_open').notNullable().defaultTo(true);
       t.text('caption');
       t.string('feed_message_id', 20);
+      // Legacy — appreciation moved to a real Discord reaction on the Feed message
+      // (feedCard.publishPost), since a custom button has no way to show who
+      // reacted the way a native reaction does. Column and post_likes below are
+      // left in place rather than dropped (no destructive schema changes without
+      // asking), just no longer written to.
       t.integer('like_count').unsigned().notNullable().defaultTo(0);
       t.timestamp('posted_at').notNullable().defaultTo(db.fn.now());
     });

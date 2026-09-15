@@ -6,6 +6,8 @@ const config = require('../config');
 const creatorRepo = require('../db/creatorRepository');
 const suspensionRepo = require('../db/creatorSuspensionRepository');
 const postRepo = require('../db/postRepository');
+const reportRepo = require('../db/conductReportRepository');
+const requestRepo = require('../db/requestRepository');
 const modRoster = require('./modRoster');
 const modSettings = require('./modSettings');
 const logger = require('../utils/logger');
@@ -23,6 +25,7 @@ function buildPanel() {
   );
   const row2 = new ActionRowBuilder().addComponents(
     new ButtonBuilder().setCustomId('modpanel_manage').setLabel('Manage a Creator').setEmoji('🔨').setStyle(ButtonStyle.Primary),
+    new ButtonBuilder().setCustomId('modpanel_escalated').setLabel('Escalated Reports').setEmoji('🚨').setStyle(ButtonStyle.Danger),
   );
   return { embeds: [embed], components: [row1, row2] };
 }
@@ -260,7 +263,96 @@ async function deleteFinal(interaction) {
   await interaction.editReply({ content: `${member?.displayName || 'Creator'} removed — their content is gone.`, embeds: [], components: [] });
 }
 
+// Escalate previously had no follow-through: clicking it on a report card just set
+// status='ESCALATED' and nothing else ever surfaced it again. This is that missing
+// piece — a live, always-current list of unresolved escalations, oldest first, so
+// nothing quietly gets forgotten. Falls back to a raw Discord username if the
+// reported member already left/was removed from the server (a real possibility —
+// escalation often means a mod kicked or banned them outside the bot).
+async function resolveDisplayName(guild, discordUserId) {
+  const member = await guild.members.fetch(discordUserId).catch(() => null);
+  if (member) return member.displayName;
+  const user = await guild.client.users.fetch(discordUserId).catch(() => null);
+  return user?.tag || `User ${discordUserId}`;
+}
+
+async function startEscalated(interaction) {
+  await interaction.deferReply({ ephemeral: true });
+  const escalated = await reportRepo.listByStatus(interaction.guildId, 'ESCALATED');
+  if (escalated.length === 0) {
+    return interaction.editReply({ content: '✅ No escalated reports right now.' });
+  }
+
+  const withNames = await Promise.all(escalated.map(async (report) => ({
+    report,
+    name: await resolveDisplayName(interaction.guild, report.reported_discord_id),
+  })));
+
+  const embed = new EmbedBuilder()
+    .setTitle('🚨 Escalated Reports')
+    .setDescription(withNames.map(({ report, name }) => `• **${name}** — escalated ${new Date(report.created_at).toLocaleDateString()}`).join('\n'))
+    .setFooter({ text: 'Oldest first. Pick one below to see full details and mark it resolved.' })
+    .setColor(0xE0245E);
+
+  // Select menus cap at 25 — same simplification as elsewhere in this file.
+  const options = withNames.slice(0, 25).map(({ report, name }) => ({
+    label: `${name} — ${new Date(report.created_at).toLocaleDateString()}`.slice(0, 100),
+    value: `${report.id}`,
+  }));
+  const row = new ActionRowBuilder().addComponents(
+    new StringSelectMenuBuilder().setCustomId('modpanel_select_escalated').setPlaceholder('View a report...').addOptions(options),
+  );
+
+  await interaction.editReply({ embeds: [embed], components: [row] });
+}
+
+async function buildEscalatedDetail(guild, report) {
+  const reportedName = await resolveDisplayName(guild, report.reported_discord_id);
+  const embed = new EmbedBuilder()
+    .setTitle(`🚨 Report on ${reportedName}`)
+    .addFields(
+      { name: 'Reported', value: `<@${report.reported_discord_id}>`, inline: true },
+      { name: 'Reporter', value: `<@${report.reporter_discord_id}>`, inline: true },
+      { name: 'Escalated', value: new Date(report.created_at).toLocaleString() },
+    )
+    .setColor(0xE0245E);
+
+  // Requests are encrypted at rest everywhere else — decrypted here specifically
+  // because a mod resolving an escalation needs to see what was actually sent,
+  // same reasoning as reports.postReportCard.
+  if (report.request_id) {
+    const request = await requestRepo.getRequest(report.request_id);
+    if (request) embed.addFields({ name: 'Original request', value: request.text.slice(0, 1000) });
+  }
+  if (report.context) embed.addFields({ name: 'Reported message', value: report.context.slice(0, 1000) });
+  if (report.reason) embed.addFields({ name: 'Reason given', value: report.reason.slice(0, 500) });
+
+  const row = new ActionRowBuilder().addComponents(
+    new ButtonBuilder().setCustomId(`modpanel_resolve_${report.id}`).setLabel('Mark Resolved').setEmoji('✅').setStyle(ButtonStyle.Success),
+  );
+  return { embeds: [embed], components: [row] };
+}
+
+async function selectEscalated(interaction) {
+  await interaction.deferUpdate();
+  const report = await reportRepo.getReport(Number(interaction.values[0]));
+  if (!report) return interaction.editReply({ content: 'Report not found.', embeds: [], components: [] });
+  await interaction.editReply(await buildEscalatedDetail(interaction.guild, report));
+}
+
+// Deliberately no DM here — by the time something reaches Resolved, the mod has
+// already handled it manually outside the bot (kick/ban/timeout), which is the
+// entire point of Escalate over Warn/Restrict. This just closes the loop so it
+// stops showing up in the list above.
+async function resolveEscalated(interaction) {
+  await interaction.deferUpdate();
+  const reportId = Number(interaction.customId.split('_')[2]);
+  await reportRepo.updateStatus(reportId, 'RESOLVED', interaction.user.id);
+  await interaction.editReply({ content: '✅ Marked resolved.', embeds: [], components: [] });
+}
+
 module.exports = {
   postPanel, routeRoster, routeSettings, startManage, selectCreator, showSuspendModal, handleSuspendSubmit,
   liftSuspension, archiveCreator, startDelete, cancelDelete, deleteFinal,
+  startEscalated, selectEscalated, resolveEscalated,
 };

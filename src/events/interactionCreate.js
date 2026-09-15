@@ -55,12 +55,14 @@ function resolveHandler(interaction) {
     if (id === 'modpanel_roster') return modPanel.routeRoster;
     if (id === 'modpanel_settings') return modPanel.routeSettings;
     if (id === 'modpanel_manage') return modPanel.startManage;
+    if (id === 'modpanel_escalated') return modPanel.startEscalated;
     if (id.startsWith('modpanel_suspend_')) return modPanel.showSuspendModal;
     if (id.startsWith('modpanel_lift_')) return modPanel.liftSuspension;
     if (id.startsWith('modpanel_archive_')) return modPanel.archiveCreator;
     if (id.startsWith('modpanel_delete_start_')) return modPanel.startDelete;
     if (id.startsWith('modpanel_delete_final_')) return modPanel.deleteFinal;
     if (id.startsWith('modpanel_delete_cancel_')) return modPanel.cancelDelete;
+    if (id.startsWith('modpanel_resolve_')) return modPanel.resolveEscalated;
 
     if (id.startsWith('like_')) return feedCard.handleLike;
     if (id.startsWith('profile_')) return profile.showByCreatorId;
@@ -94,6 +96,7 @@ function resolveHandler(interaction) {
     if (interaction.customId === 'apply_frequency') return applyFlow.setFrequency;
     if (interaction.customId === 'directory_select') return creatorDirectory.handleSelect;
     if (interaction.customId === 'modpanel_select_creator') return modPanel.selectCreator;
+    if (interaction.customId === 'modpanel_select_escalated') return modPanel.selectEscalated;
     return null;
   }
 

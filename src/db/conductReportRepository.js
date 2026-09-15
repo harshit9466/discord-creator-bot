@@ -35,4 +35,12 @@ async function countReportsAgainst(reportedDiscordId, guildId) {
   return { totalReports: rows.length, distinctReporters: distinctReporters.size };
 }
 
-module.exports = { createReport, getReport, setModMessageId, updateStatus, countReportsAgainst };
+// Oldest first — so the longest-unresolved escalation surfaces at the top of the
+// Mod Panel's Escalated Reports list instead of getting buried by newer ones.
+async function listByStatus(guildId, status, limit = 25) {
+  return db('conduct_reports').where({ guild_id: guildId, status }).orderBy('created_at', 'asc').limit(limit);
+}
+
+module.exports = {
+  createReport, getReport, setModMessageId, updateStatus, countReportsAgainst, listByStatus,
+};

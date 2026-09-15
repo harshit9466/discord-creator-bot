@@ -12,6 +12,7 @@ const modRoster = require('../interactions/modRoster');
 const modSettings = require('../interactions/modSettings');
 const creatorDirectory = require('../interactions/creatorDirectory');
 const modPanel = require('../interactions/modPanel');
+const introFlow = require('../interactions/introFlow');
 
 // Resolves which handler a given interaction maps to, or null if none match.
 // Kept separate from execute() so there is exactly one place that awaits the
@@ -89,6 +90,12 @@ function resolveHandler(interaction) {
     if (id.startsWith('checkin_back_')) return statusFlow.handleCheckinBack;
     if (id.startsWith('checkin_more_')) return statusFlow.handleCheckinMore;
     if (id.startsWith('checkindur_')) return statusFlow.handleCheckinMoreDuration;
+
+    if (id.startsWith('introstart_')) return introFlow.start;
+    if (id.startsWith('intromode_custom_')) return introFlow.chooseCustom;
+    if (id.startsWith('intromode_generic_')) return introFlow.chooseGeneric;
+    if (id.startsWith('introaddmedia_')) return introFlow.startMediaCollection;
+    if (id.startsWith('introskip_')) return introFlow.finalizeNoMedia;
     return null;
   }
 
@@ -113,6 +120,8 @@ function resolveHandler(interaction) {
     if (id === 'modsettings_eligibility_modal') return modSettings.handleEligibilitySubmit;
     if (id === 'modsettings_policy_modal') return modSettings.handlePolicySubmit;
     if (id.startsWith('modpanel_suspendmodal_')) return modPanel.handleSuspendSubmit;
+    if (id.startsWith('profeditmodal_')) return profile.handleEditCaptionSubmit;
+    if (id.startsWith('introcustommodal_')) return introFlow.handleCustomModalSubmit;
     return null;
   }
 

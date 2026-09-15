@@ -46,6 +46,13 @@ async function markApproved(creatorId) {
   return db('creators').where({ id: creatorId }).update({ approved_at: db.fn.now() });
 }
 
+// Guards introFlow.start() against a second Feed announcement for the same
+// creator — the welcome message's "Introduce Me" button has no other way to know
+// it's already been used, since it isn't removed/disabled after the first click.
+async function setIntroPosted(creatorId) {
+  return db('creators').where({ id: creatorId }).update({ intro_posted_at: db.fn.now() });
+}
+
 async function setOnBreak(creatorId, breakReturnAt) {
   return db('creators').where({ id: creatorId }).update({ status: 'ON_BREAK', break_return_at: breakReturnAt });
 }
@@ -87,6 +94,6 @@ async function getCreatorsOnBreakPastReturn() {
 
 module.exports = {
   findOrCreateCreator, getCreatorById, getCreatorByDiscordId, getCreatorByThreadId, setThreadId,
-  updateBoundaries, setDefaultContentType, markApproved, setOnBreak, clearBreakReturn, reactivate,
-  stepDown, suspend, deleteCreator, listByGuild, getCreatorsOnBreakPastReturn,
+  updateBoundaries, setDefaultContentType, markApproved, setIntroPosted, setOnBreak, clearBreakReturn,
+  reactivate, stepDown, suspend, deleteCreator, listByGuild, getCreatorsOnBreakPastReturn,
 };

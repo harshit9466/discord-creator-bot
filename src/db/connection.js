@@ -67,6 +67,14 @@ async function initDb() {
     });
   }
 
+  // intro_posted_at was added after the creators table already existed in production —
+  // same reasoning and same ALTER-if-missing pattern as extra_media_urls below.
+  if (!(await db.schema.hasColumn('creators', 'intro_posted_at'))) {
+    await db.schema.alterTable('creators', (t) => {
+      t.timestamp('intro_posted_at');
+    });
+  }
+
   // extra_media_urls was added after the posts table already existed in production
   // (Neon) — the createTable block above only runs on a brand-new DB, so this ALTER
   // is what actually gets the column onto the live table. Idempotent: on a fresh DB

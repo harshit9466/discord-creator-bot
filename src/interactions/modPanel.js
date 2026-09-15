@@ -27,23 +27,33 @@ function buildPanel() {
   return { embeds: [embed], components: [row1, row2] };
 }
 
-// Same edit-in-place pattern as homeMenu.postHomeMenu — re-running the setup
-// command after a future change refreshes the pinned panel instead of leaving a
-// duplicate pinned message behind.
+// Posts to whichever channel the command was run in, not a fixed config channel
+// like homeMenu.postHomeMenu does — that one has to be HOME_CHANNEL_ID because
+// other messages link back to it, but the mod panel has no such constraint, and
+// mod-review already carries a constant stream of individual application/report
+// cards, so hardcoding it there (the original version of this function) would
+// bury the pinned panel under that traffic. Letting mods choose — mod-review,
+// a dedicated mod-tools channel, wherever — is just more useful.
+//
+// Same edit-in-place pattern as homeMenu.postHomeMenu — re-running this in the
+// same channel after a future change refreshes the pinned panel there instead of
+// leaving a duplicate pinned message behind. Running it in a *different* channel
+// intentionally posts a fresh one — moving the panel is a deliberate act, not a
+// refresh, so it shouldn't silently edit whatever's pinned elsewhere.
 async function postPanel(interaction) {
   await interaction.deferReply({ ephemeral: true });
-  const channel = await interaction.guild.channels.fetch(config.modReviewChannelId);
+  const channel = interaction.channel;
 
   const { items } = await channel.messages.fetchPins();
   const existing = items.find((i) => i.message.author.id === interaction.client.user.id && i.message.embeds[0]?.title === '🛡️ Mod Panel')?.message;
   if (existing) {
     await existing.edit(buildPanel());
-    return interaction.editReply({ content: `Mod panel refreshed in <#${config.modReviewChannelId}>.` });
+    return interaction.editReply({ content: `Mod panel refreshed in <#${channel.id}>.` });
   }
 
   const message = await channel.send(buildPanel());
   await message.pin().catch(() => {});
-  await interaction.editReply({ content: `Mod panel posted in <#${config.modReviewChannelId}>.` });
+  await interaction.editReply({ content: `Mod panel posted in <#${channel.id}>.` });
 }
 
 // Routed straight through to the existing standalone handlers — the panel is a

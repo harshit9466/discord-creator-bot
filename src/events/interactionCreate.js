@@ -66,6 +66,10 @@ function resolveHandler(interaction) {
 
     if (id.startsWith('profile_')) return profile.showByCreatorId;
     if (id.startsWith('profilepage_')) return profile.changePage;
+    if (id.startsWith('profedit_')) return profile.showEditCaptionModal;
+    if (id.startsWith('profdelstart_')) return profile.startDeletePost;
+    if (id.startsWith('profdelfinal_')) return profile.deletePostFinal;
+    if (id.startsWith('profdelcancel_')) return profile.cancelDeletePost;
 
     if (id.startsWith('reqcontinue_')) return requestFlow.showModal;
     if (id.startsWith('reqstart_')) return requestFlow.start;

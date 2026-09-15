@@ -21,4 +21,12 @@ module.exports = {
 
   // Mod roster flags an ACTIVE creator who hasn't posted in this many days
   inactivityFlagDays: Number(process.env.INACTIVITY_FLAG_DAYS || 21),
+
+  // Content-preference roles VerifyBot assigns post-verification — pinged when a
+  // new creator introduces themselves in the Feed, alongside @here.
+  introPingRoleIds: [
+    process.env.INITIATE_ROLE_ID,
+    process.env.NSFW_ONLY_ROLE_ID,
+    process.env.ANYTIME_ROLE_ID,
+  ].filter(Boolean),
 };

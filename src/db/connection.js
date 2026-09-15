@@ -49,6 +49,13 @@ async function initDb() {
       t.string('content_type', 10).notNullable(); // SFW | NSFW
       t.boolean('requests_open').notNullable().defaultTo(true);
       t.text('caption');
+      // media_url stays the primary/first item (used by Profile pagination,
+      // requests, etc. — nothing else needed to change). Extra attachments from
+      // a single multi-image post go here as a JSON-stringified array of URLs,
+      // same "plain text column, parse in JS" reasoning as request_text_enc —
+      // consistent behavior across pg/mysql2/sqlite3 without depending on
+      // driver-specific JSON column handling.
+      t.text('extra_media_urls');
       t.string('feed_message_id', 20);
       // Legacy — appreciation moved to a real Discord reaction on the Feed message
       // (feedCard.publishPost), since a custom button has no way to show who
@@ -57,6 +64,16 @@ async function initDb() {
       // asking), just no longer written to.
       t.integer('like_count').unsigned().notNullable().defaultTo(0);
       t.timestamp('posted_at').notNullable().defaultTo(db.fn.now());
+    });
+  }
+
+  // extra_media_urls was added after the posts table already existed in production
+  // (Neon) — the createTable block above only runs on a brand-new DB, so this ALTER
+  // is what actually gets the column onto the live table. Idempotent: on a fresh DB
+  // the column already exists from createTable, so hasColumn is true and this no-ops.
+  if (!(await db.schema.hasColumn('posts', 'extra_media_urls'))) {
+    await db.schema.alterTable('posts', (t) => {
+      t.text('extra_media_urls');
     });
   }
 

@@ -98,7 +98,7 @@ async function handleCaptionSubmit(interaction) {
   let dmChannel;
   try {
     dmChannel = await interaction.user.createDM();
-    await dmChannel.send('Send the photo or video for your post here (just attach it and hit send). You have 5 minutes.');
+    await dmChannel.send('Send the photo(s)/video(s) for your post here — attach as many as you like in one message, then hit send. You have 5 minutes.');
   } catch (err) {
     logger.warn(`Could not DM ${interaction.user.id} for post flow: ${err.message}`);
     return interaction.followUp({ content: "I can't DM you — check your privacy settings allow DMs from server members, then try again.", ephemeral: true });
@@ -120,19 +120,20 @@ async function handleCaptionSubmit(interaction) {
     return dmChannel.send('Timed out waiting for an attachment — click Post Content again to retry.');
   }
 
-  const attachment = collected.first().attachments.first();
+  const [primary, ...rest] = [...collected.first().attachments.values()];
   const creator = await creatorRepo.findOrCreateCreator(interaction.user.id, interaction.guildId);
   const post = await postRepo.createPost({
     creatorId: creator.id,
     guildId: interaction.guildId,
-    mediaUrl: attachment.url,
+    mediaUrl: primary.url,
+    extraMediaUrls: rest.map((a) => a.url),
     contentType: draft.contentType,
     requestsOpen: draft.requestsOpen,
     caption: draft.caption,
   });
 
   const { thread } = await creatorSpace.ensureCreatorThread(interaction.guild, interaction.member);
-  await thread.send({ content: draft.caption || undefined, files: [attachment.url] }).catch((err) => {
+  await thread.send({ content: draft.caption || undefined, files: [primary.url, ...rest.map((a) => a.url)] }).catch((err) => {
     logger.warn(`Could not mirror post into creator thread for ${interaction.user.id}: ${err.message}`);
   });
 

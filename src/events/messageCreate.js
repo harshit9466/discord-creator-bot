@@ -36,11 +36,14 @@ module.exports = {
     if (!creator || creator.discord_user_id !== message.author.id) return;
 
     try {
-      const attachment = message.attachments.first();
+      // All attachments from the message, not just the first — a creator dropping
+      // 3 photos in one message used to only ever post the first one to the Feed.
+      const [primary, ...rest] = [...message.attachments.values()];
       const post = await postRepo.createPost({
         creatorId: creator.id,
         guildId: message.guildId,
-        mediaUrl: attachment.url,
+        mediaUrl: primary.url,
+        extraMediaUrls: rest.map((a) => a.url),
         contentType: creator.default_content_type,
         requestsOpen: creator.requests_open,
         caption: message.content || null,

@@ -77,12 +77,14 @@ async function start(interaction) {
   const postsOk = postCount >= settings.eligibility_min_posts;
 
   if (!tenureOk || !postsOk) {
+    const trackedMentions = guildSettingsRepo.trackedChannelIds(settings).map((id) => `<#${id}>`).join(', ') || '_no channels configured yet_';
     const embed = new EmbedBuilder()
       .setTitle('Not quite eligible yet')
       .setDescription('Keep going — this unlocks automatically once you meet both:')
       .addFields(
         { name: 'Tenure', value: `${tenureOk ? '✅' : '❌'} ${tenureDays}/${settings.eligibility_min_tenure_days} days` },
         { name: 'Activity', value: `${postsOk ? '✅' : '❌'} ${postCount}/${settings.eligibility_min_posts} tracked posts` },
+        { name: 'Post more in', value: trackedMentions },
       )
       .setColor(0xFAA61A);
     return interaction.editReply({ embeds: [embed] });

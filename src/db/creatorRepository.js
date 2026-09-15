@@ -62,6 +62,14 @@ async function stepDown(creatorId, mode) {
   return db('creators').where({ id: creatorId }).update({ status: 'STEPPED_DOWN', step_down_mode: mode });
 }
 
+// Mod-only status, distinct from Step Down/Archive: overrides whatever status the
+// creator was in, and — unlike Archive — reactivate() is deliberately NOT reachable
+// by the creator themselves while suspended (enforced in settings.js). Only a mod
+// lifting it via the Mod Panel calls reactivate() to clear it.
+async function suspend(creatorId) {
+  return db('creators').where({ id: creatorId }).update({ status: 'SUSPENDED' });
+}
+
 // Posts cascade-delete via the FK (onDelete('CASCADE')) — deleting the creator row
 // is the whole "Delete" step-down mode, deliberately, so there's exactly one place
 // that decides what "permanently delete a creator" means.
@@ -80,5 +88,5 @@ async function getCreatorsOnBreakPastReturn() {
 module.exports = {
   findOrCreateCreator, getCreatorById, getCreatorByDiscordId, getCreatorByThreadId, setThreadId,
   updateBoundaries, setDefaultContentType, markApproved, setOnBreak, clearBreakReturn, reactivate,
-  stepDown, deleteCreator, listByGuild, getCreatorsOnBreakPastReturn,
+  stepDown, suspend, deleteCreator, listByGuild, getCreatorsOnBreakPastReturn,
 };

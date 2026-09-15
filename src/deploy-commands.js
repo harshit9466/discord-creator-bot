@@ -20,6 +20,11 @@ const commands = [
     .setDescription('View or edit eligibility rules and the creator policy (mods only)')
     .setDefaultMemberPermissions(PermissionFlagsBits.ManageGuild)
     .toJSON(),
+  new SlashCommandBuilder()
+    .setName('setup-mod-panel')
+    .setDescription('Post the mod panel — roster, settings, and manage-a-creator in one place (mods only)')
+    .setDefaultMemberPermissions(PermissionFlagsBits.ManageGuild)
+    .toJSON(),
   new ContextMenuCommandBuilder()
     .setName('Report Message')
     .setType(ApplicationCommandType.Message)

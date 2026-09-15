@@ -1,17 +1,30 @@
 const { ModalBuilder, TextInputBuilder, TextInputStyle, ActionRowBuilder, ButtonBuilder, ButtonStyle } = require('discord.js');
-const config = require('../config');
 const creatorRepo = require('../db/creatorRepository');
+const suspensionRepo = require('../db/creatorSuspensionRepository');
 
 // Entry point from the home menu — shows a different set of options depending on
-// whether the creator is active, on a break, or archived, rather than one fixed menu.
+// whether the creator is active, on a break, archived, or suspended.
+//
+// Deliberately does NOT gate on currently holding the Creator role: Archive,
+// Step Down, and Suspend all remove it, so gating here on role membership meant
+// an archived creator could never see their own Reactivate button again — a real
+// bug, not just a design choice. Gating on "does a creator record exist" instead
+// covers every status correctly, including this one.
 async function start(interaction) {
-  if (!interaction.member.roles.cache.has(config.creatorRoleId)) {
-    return interaction.reply({ content: 'Only creators have settings here.', ephemeral: true });
-  }
   await interaction.deferReply({ ephemeral: true });
 
   const creator = await creatorRepo.getCreatorByDiscordId(interaction.user.id, interaction.guildId);
   if (!creator) return interaction.editReply({ content: 'No creator profile found yet — post something first!' });
+
+  if (creator.status === 'SUSPENDED') {
+    const open = await suspensionRepo.getOpenSuspension(creator.id);
+    return interaction.editReply({
+      content:
+        "🚫 You're currently suspended and can't manage your creator settings.\n\n" +
+        `**Reason:** ${open?.reason || '_not recorded_'}\n\n` +
+        'A mod needs to lift this before anything changes — reach out if you have questions.',
+    });
+  }
 
   const row = new ActionRowBuilder();
   if (creator.status === 'STEPPED_DOWN' && creator.step_down_mode === 'ARCHIVE') {

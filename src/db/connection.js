@@ -156,6 +156,23 @@ async function initDb() {
     });
   }
 
+  // One row per suspension event, not columns on creators — a mod lifting a
+  // suspension shouldn't erase the record that it happened. Lets the mod panel
+  // show both "is this creator currently suspended" (whereNull('lifted_at')) and
+  // full history across multiple incidents over time.
+  if (!(await db.schema.hasTable('creator_suspensions'))) {
+    await db.schema.createTable('creator_suspensions', (t) => {
+      t.increments('id').primary();
+      t.integer('creator_id').unsigned().notNullable().references('id').inTable('creators').onDelete('CASCADE');
+      t.string('guild_id', 20).notNullable();
+      t.text('reason').notNullable();
+      t.string('suspended_by', 20).notNullable();
+      t.timestamp('suspended_at').notNullable().defaultTo(db.fn.now());
+      t.string('lifted_by', 20);
+      t.timestamp('lifted_at');
+    });
+  }
+
   logger.info(`Database tables initialized (client: ${client})`);
 }
 

@@ -11,6 +11,7 @@ const statusFlow = require('../interactions/statusFlow');
 const modRoster = require('../interactions/modRoster');
 const modSettings = require('../interactions/modSettings');
 const creatorDirectory = require('../interactions/creatorDirectory');
+const modPanel = require('../interactions/modPanel');
 
 // Resolves which handler a given interaction maps to, or null if none match.
 // Kept separate from execute() so there is exactly one place that awaits the
@@ -24,6 +25,9 @@ function resolveHandler(interaction) {
   }
   if (interaction.isChatInputCommand() && interaction.commandName === 'creator-settings') {
     return modSettings.postPanel;
+  }
+  if (interaction.isChatInputCommand() && interaction.commandName === 'setup-mod-panel') {
+    return modPanel.postPanel;
   }
   if (interaction.isMessageContextMenuCommand() && interaction.commandName === 'Report Message') {
     return reports.startFromMessage;
@@ -47,6 +51,16 @@ function resolveHandler(interaction) {
     if (id === 'modsettings_edit_eligibility') return modSettings.showEligibilityModal;
     if (id === 'modsettings_edit_policy') return modSettings.showPolicyModal;
     if (id === 'modsettings_view_policy') return modSettings.viewFullPolicy;
+
+    if (id === 'modpanel_roster') return modPanel.routeRoster;
+    if (id === 'modpanel_settings') return modPanel.routeSettings;
+    if (id === 'modpanel_manage') return modPanel.startManage;
+    if (id.startsWith('modpanel_suspend_')) return modPanel.showSuspendModal;
+    if (id.startsWith('modpanel_lift_')) return modPanel.liftSuspension;
+    if (id.startsWith('modpanel_archive_')) return modPanel.archiveCreator;
+    if (id.startsWith('modpanel_delete_start_')) return modPanel.startDelete;
+    if (id.startsWith('modpanel_delete_final_')) return modPanel.deleteFinal;
+    if (id.startsWith('modpanel_delete_cancel_')) return modPanel.cancelDelete;
 
     if (id.startsWith('like_')) return feedCard.handleLike;
     if (id.startsWith('profile_')) return profile.showByCreatorId;
@@ -79,6 +93,7 @@ function resolveHandler(interaction) {
     if (interaction.customId === 'apply_comfort') return applyFlow.setComfort;
     if (interaction.customId === 'apply_frequency') return applyFlow.setFrequency;
     if (interaction.customId === 'directory_select') return creatorDirectory.handleSelect;
+    if (interaction.customId === 'modpanel_select_creator') return modPanel.selectCreator;
     return null;
   }
 
@@ -91,6 +106,7 @@ function resolveHandler(interaction) {
     if (id.startsWith('reqreportmodal_')) return reports.handleRequestReportModal;
     if (id === 'modsettings_eligibility_modal') return modSettings.handleEligibilitySubmit;
     if (id === 'modsettings_policy_modal') return modSettings.handlePolicySubmit;
+    if (id.startsWith('modpanel_suspendmodal_')) return modPanel.handleSuspendSubmit;
     return null;
   }
 

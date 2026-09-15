@@ -27,6 +27,7 @@ and should be encrypted the same way.
 | `requests_open` | used for both native and button-flow posts by default |
 | `break_return_at`, `step_down_mode` | Phase 3 (On a Break / Step Down flows) |
 | `applied_at`, `approved_at` | Phase 2 (eligibility-gated apply flow) |
+| `intro_posted_at` | set once `introFlow.publishIntro` has announced this creator in the Feed — guards the onboarding "Introduce Me" button against firing twice. Same `hasColumn`/`alterTable` migration story as `posts.extra_media_urls` |
 
 ## `posts`
 

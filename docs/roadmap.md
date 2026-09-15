@@ -96,11 +96,19 @@ something to automate silently. Run 2026-09-15: 25 creators onboarded, 0 errors.
   unarchive a reused thread on re-approval) shipped 2026-09-15; this session
   live-checked role membership, thread archived-state, and message history for the
   reporting case again before telling the user it holds.
-- Not started yet: Feed introduction announcements on a new creator joining
-  (custom vs. generic intro, optional media, pings to Initiate/NSFW Only/Anytime +
-  `@here` — `config.introPingRoleIds` is in place, nothing consumes it yet), and a
-  proper member-facing creator list view (deliberately deferred — this one needs
-  real design thought, not a quick build).
+- **Feed introduction for new creators** — the onboarding welcome message (in the
+  creator's own thread) now has an "Introduce Me in the Feed" button alongside Set
+  My Boundaries. Walks through: write your own intro (modal) or use a generic one,
+  then optionally attach a photo over DM (same "modals can't hold a file picker,
+  DM for media" pattern as the post flow) — see `src/interactions/introFlow.js`.
+  Posts to the Feed pinging `@here` plus the three content-preference roles
+  (`config.introPingRoleIds`: Initiate/NSFW Only/Anytime), with a Profile button.
+  Guarded by `creators.intro_posted_at` so it can't fire twice for the same
+  creator. Only wired into the welcome message going forward — deliberately not
+  retrofitted onto creators who onboarded before this shipped, same restraint as
+  `onboardExistingCreators.js` not touching pre-existing content.
+- Not started yet: a proper member-facing creator list view (deliberately deferred
+  — this one needs real design thought, not a quick build).
 
 ## Incidents this session
 

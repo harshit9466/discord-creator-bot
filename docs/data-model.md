@@ -35,9 +35,10 @@ and should be encrypted the same way.
 | `creator_id` | FK → `creators.id`, cascade delete |
 | `media_url` | Discord CDN URL of the attachment |
 | `content_type`, `requests_open` | per-post override of the creator's defaults (button flow only — native posts always use the creator's defaults) |
-| `caption` | plaintext, not encrypted (public content) |
-| `feed_message_id` | the Feed message this post published as, for future edit/delete support |
-| `like_count` | denormalized counter, kept in sync by `post_likes` in `postRepository.toggleLike` |
+| `caption` | plaintext, not encrypted (public content) — editable by the creator via Profile > Edit Caption, which also refreshes the live Feed message in place |
+| `extra_media_urls` | JSON-stringified array of any attachments beyond the first in the same post — same "plain text column, parse in JS" reasoning as `eligibility_tracked_channel_ids` below, for identical behavior across pg/mysql2/sqlite3. Parsed back into `post.extraMediaUrls` on every read by `postRepository.parsePost`. Added after `posts` already existed in production, so `connection.js` has a `hasColumn`/`alterTable` step alongside the `createTable` guard — the createTable block alone would never reach an already-existing table |
+| `feed_message_id` | the Feed message this post published as — used to jump to it from Profile, and to locate/delete it (and its auto-deleted comment thread) when the creator deletes the post |
+| `like_count` | legacy, no longer written to — appreciation is a native ❤️ reaction on the Feed message instead, not a custom button (see roadmap.md) |
 
 ## `post_likes`
 

@@ -74,6 +74,34 @@ fresh approval would (idempotent, safe to re-run). Deliberately does **not** tou
 existing individual channels or migrate their content — that's a human decision, not
 something to automate silently. Run 2026-09-15: 25 creators onboarded, 0 errors.
 
+## Phase 4 — creator content control, in progress
+
+- **Multi-media posting** — native message-drop, the guided post flow's DM step, and
+  the Feed itself previously only ever kept the first attachment of a multi-file
+  message; every extra photo/video was silently dropped. Posts now store every
+  attachment (`posts.extra_media_urls`); the Feed renders extra images as gallery
+  embeds (main card + up to 9 more — Discord's 10-embed-per-message cap) and any
+  video/non-image file as a raw attachment instead (videos can't be embedded).
+  Smoke-tested against real Postgres: create/read/single-vs-multi-attachment all
+  round-trip correctly, including the `hasColumn`/`alterTable` migration needed
+  because `posts` already existed in production before this column did.
+- **Creator control over their own posts** — Profile, when viewed by the post's own
+  creator (ephemeral, so no separate ownership check needed on the buttons
+  themselves), now shows Edit Caption and Delete Post. Edit updates the DB and
+  refreshes the live Feed message in place; Delete removes the Feed message (which
+  auto-deletes its comment thread) and the DB row, with the same second-confirmation
+  pattern used everywhere else in this bot for irreversible actions.
+- **Archived-creator reapplication** re-investigated and re-confirmed fixed — see
+  `incident-2026-09-16-archived-reapproval.md`. The underlying fix (reset status +
+  unarchive a reused thread on re-approval) shipped 2026-09-15; this session
+  live-checked role membership, thread archived-state, and message history for the
+  reporting case again before telling the user it holds.
+- Not started yet: Feed introduction announcements on a new creator joining
+  (custom vs. generic intro, optional media, pings to Initiate/NSFW Only/Anytime +
+  `@here` — `config.introPingRoleIds` is in place, nothing consumes it yet), and a
+  proper member-facing creator list view (deliberately deferred — this one needs
+  real design thought, not a quick build).
+
 ## Incidents this session
 
 Two production bugs surfaced and fixed during real testing — see

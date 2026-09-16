@@ -65,13 +65,16 @@ async function start(interaction) {
   });
 }
 
-// No defer — showModal() has to be the direct acknowledgment of the interaction,
-// same constraint profile.showEditCaptionModal already works within.
+// No defer, and deliberately no DB call either — showModal() has to be the direct,
+// immediate acknowledgment of the interaction (same constraint
+// profile.showEditCaptionModal works within), and a Neon cold-start query taking
+// even ~3s here was enough to blow that window and show the user "Interaction
+// failed" (confirmed from a real report). Safe to skip the ownership check some
+// other handlers in this file do: this button only ever appears inside start()'s
+// ephemeral reply, which nobody but the creator who clicked it can even see, and
+// handleCustomModalSubmit re-verifies ownership anyway before anything happens.
 async function chooseCustom(interaction) {
   const creatorIdStr = interaction.customId.split('_')[2]; // intromode_custom_<creatorId>
-  const creator = await verifyOwner(interaction, Number(creatorIdStr));
-  if (!creator) return interaction.reply({ content: "This isn't your space.", ephemeral: true });
-
   const modal = new ModalBuilder().setCustomId(`introcustommodal_${creatorIdStr}`).setTitle('Your Introduction');
   const input = new TextInputBuilder()
     .setCustomId('introtext').setLabel('Introduce yourself to the server').setStyle(TextInputStyle.Paragraph)

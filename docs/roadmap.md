@@ -107,8 +107,46 @@ something to automate silently. Run 2026-09-15: 25 creators onboarded, 0 errors.
   creator. Only wired into the welcome message going forward — deliberately not
   retrofitted onto creators who onboarded before this shipped, same restraint as
   `onboardExistingCreators.js` not touching pre-existing content.
-- Not started yet: a proper member-facing creator list view (deliberately deferred
-  — this one needs real design thought, not a quick build).
+- **Member-facing creator directory**, via a Discord Forum channel
+  (`CREATOR_FORUM_CHANNEL_ID`, optional/inert until configured) — see Phase 5 below,
+  this landed the same session after more design thought as requested.
+
+## Phase 5 — post ownership redesign, forum-as-gallery, text posts
+
+Direct feedback after Phase 4 shipped: the Forum directory had become a place for
+creators to *edit* their posts instead of a place for *members* to browse a
+creator's content and talk to them, post editing required an extra click through
+Profile that added friction, and deleting one bad photo out of a multi-photo post
+deleted the whole post. Three changes:
+
+- **Post management moved into the creator's own thread**, attached directly to
+  each post as it's made (`src/interactions/postControls.js`) — Edit Caption /
+  Delete Post / Remove a Photo-Video, right there, no detour through Profile.
+  Profile (`profile.js`) is read-only again, member-facing only. For a native
+  message-drop (the creator's own message, which can't carry bot buttons), the
+  controls arrive as a bot follow-up reply instead.
+- **`postRepository.removeMediaItem(postId, url)`** removes exactly one media
+  item — promoting the next one to `media_url` if the primary was the one
+  removed, or quietly turning the post text-only if a caption remains and no
+  media is left, or deleting the post outright only if truly nothing is left.
+  No more "delete the whole post to get rid of one photo."
+- **Text-only posts** — `posts.media_url` is now nullable. The guided post flow
+  asks Photo/Video vs Text Only right after Next; Text Only skips the DM-for-media
+  step entirely since there's nothing to collect. Native message-drop stays
+  media-required (an attachment is still the only unambiguous "this is meant to be
+  a post, not just chat in my thread" signal).
+- **The Forum directory now mirrors actual content**, not just a status card —
+  `forumDirectory.mirrorPost` sends every new post into the creator's own forum
+  thread as it's made (`src/utils/postCard.js` holds the shared embed-building
+  logic so `feedCard.js` and `forumDirectory.js` don't require each other in a
+  cycle). Scrolling a creator's forum thread now shows everything they've shared,
+  oldest to newest, and since it's a normal Discord thread members can reply right
+  there to actually talk to them — the starter message stays a lightweight status
+  card. `refreshMirroredPost`/`deleteMirroredPost` keep that copy in sync with
+  edits/removals/deletes. The intro announcement also got its own comment thread,
+  matching every other post (it was missing one).
+- `src/scripts/backfillForumMirrors.js` mirrored the handful of posts that existed
+  before this shipped. Run 2026-09-16: 7 mirrored, 0 skipped, 0 failed.
 
 ## Incidents this session
 

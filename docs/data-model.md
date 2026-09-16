@@ -34,11 +34,12 @@ and should be encrypted the same way.
 | Column | Purpose |
 |---|---|
 | `creator_id` | FK → `creators.id`, cascade delete |
-| `media_url` | Discord CDN URL of the attachment |
+| `media_url` | Discord CDN URL of the primary attachment — **nullable**: a text-only post has no media at all, caption carries the content. `postRepository.createPost` enforces "at least one of media_url/caption" in application code, not a DB constraint |
 | `content_type`, `requests_open` | per-post override of the creator's defaults (button flow only — native posts always use the creator's defaults) |
-| `caption` | plaintext, not encrypted (public content) — editable by the creator via Profile > Edit Caption, which also refreshes the live Feed message in place |
-| `extra_media_urls` | JSON-stringified array of any attachments beyond the first in the same post — same "plain text column, parse in JS" reasoning as `eligibility_tracked_channel_ids` below, for identical behavior across pg/mysql2/sqlite3. Parsed back into `post.extraMediaUrls` on every read by `postRepository.parsePost`. Added after `posts` already existed in production, so `connection.js` has a `hasColumn`/`alterTable` step alongside the `createTable` guard — the createTable block alone would never reach an already-existing table |
+| `caption` | plaintext, not encrypted (public content). Editable, and individual media items removable, entirely from the creator's own thread now (`postControls.js`) — not from the member-facing Profile view, which is read-only |
+| `extra_media_urls` | JSON-stringified array of any attachments beyond the first in the same post — same "plain text column, parse in JS" reasoning as `eligibility_tracked_channel_ids` below, for identical behavior across pg/mysql2/sqlite3. Parsed back into `post.extraMediaUrls` on every read by `postRepository.parsePost`. `removeMediaItem(postId, url)` removes exactly one item (promoting the next one to `media_url` if that's the one removed), rather than forcing a whole-post delete to get rid of one bad shot |
 | `feed_message_id` | the Feed message this post published as — used to jump to it from Profile, and to locate/delete it (and its auto-deleted comment thread) when the creator deletes the post |
+| `forum_mirror_message_id` | the message this post was mirrored to inside the creator's own Forum directory thread (`forumDirectory.mirrorPost`) — lets a caption edit, media removal, or delete keep that copy in sync instead of leaving a stale one behind |
 | `like_count` | legacy, no longer written to — appreciation is a native ❤️ reaction on the Feed message instead, not a custom button (see roadmap.md) |
 
 ## `post_likes`

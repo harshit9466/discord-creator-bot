@@ -38,7 +38,7 @@ async function publishIntro(guild, creator, introText, mediaUrl) {
   // the role mentions ping rather than render as plain text.
   const rolePings = config.introPingRoleIds.map((id) => `<@&${id}>`).join(' ');
   const channel = await guild.channels.fetch(config.feedChannelId);
-  await channel.send({
+  const message = await channel.send({
     content: `@here ${rolePings}`.trim(),
     embeds: [embed],
     components: [new ActionRowBuilder().addComponents(
@@ -46,6 +46,9 @@ async function publishIntro(guild, creator, introText, mediaUrl) {
     )],
     allowedMentions: { parse: ['everyone'], roles: config.introPingRoleIds },
   });
+  // Same comment-thread pattern every regular post gets (feedCard.publishPost) —
+  // without it there was no way to actually talk to the new creator right there.
+  await message.startThread({ name: `Welcome ${member?.displayName || 'them'}!`, autoArchiveDuration: 1440 }).catch(() => {});
   await creatorRepo.setIntroPosted(creator.id);
 }
 
@@ -66,8 +69,7 @@ async function start(interaction) {
 }
 
 // No defer, and deliberately no DB call either — showModal() has to be the direct,
-// immediate acknowledgment of the interaction (same constraint
-// profile.showEditCaptionModal works within), and a Neon cold-start query taking
+// immediate acknowledgment of the interaction, and a Neon cold-start query taking
 // even ~3s here was enough to blow that window and show the user "Interaction
 // failed" (confirmed from a real report). Safe to skip the ownership check some
 // other handlers in this file do: this button only ever appears inside start()'s

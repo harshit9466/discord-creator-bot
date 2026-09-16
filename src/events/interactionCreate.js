@@ -13,6 +13,7 @@ const modSettings = require('../interactions/modSettings');
 const creatorDirectory = require('../interactions/creatorDirectory');
 const modPanel = require('../interactions/modPanel');
 const introFlow = require('../interactions/introFlow');
+const postControls = require('../interactions/postControls');
 
 // Resolves which handler a given interaction maps to, or null if none match.
 // Kept separate from execute() so there is exactly one place that awaits the
@@ -43,6 +44,8 @@ function resolveHandler(interaction) {
     if (id === 'home_directory') return creatorDirectory.postDirectory;
 
     if (id === 'postflow_next') return postFlow.handleNext;
+    if (id === 'postflow_kind_media') return postFlow.chooseMediaKind;
+    if (id === 'postflow_kind_text') return postFlow.chooseTextKind;
 
     if (id === 'apply_view_policy') return applyFlow.viewPolicy;
     if (id === 'apply_agree') return applyFlow.toggleAgree;
@@ -67,10 +70,12 @@ function resolveHandler(interaction) {
 
     if (id.startsWith('profile_')) return profile.showByCreatorId;
     if (id.startsWith('profilepage_')) return profile.changePage;
-    if (id.startsWith('profedit_')) return profile.showEditCaptionModal;
-    if (id.startsWith('profdelstart_')) return profile.startDeletePost;
-    if (id.startsWith('profdelfinal_')) return profile.deletePostFinal;
-    if (id.startsWith('profdelcancel_')) return profile.cancelDeletePost;
+
+    if (id.startsWith('postmgmt_edit_')) return postControls.showEditModal;
+    if (id.startsWith('postmgmt_delstart_')) return postControls.startDelete;
+    if (id.startsWith('postmgmt_delfinal_')) return postControls.deleteFinal;
+    if (id.startsWith('postmgmt_delcancel_')) return postControls.cancelDelete;
+    if (id.startsWith('postmgmt_removemedia_')) return postControls.startRemoveMedia;
 
     if (id.startsWith('reqcontinue_')) return requestFlow.showModal;
     if (id.startsWith('reqstart_')) return requestFlow.start;
@@ -107,12 +112,15 @@ function resolveHandler(interaction) {
     if (interaction.customId === 'directory_select') return creatorDirectory.handleSelect;
     if (interaction.customId === 'modpanel_select_creator') return modPanel.selectCreator;
     if (interaction.customId === 'modpanel_select_escalated') return modPanel.selectEscalated;
+    if (interaction.customId.startsWith('postmgmt_removemediaselect_')) return postControls.handleRemoveMediaSelect;
     return null;
   }
 
   if (interaction.isModalSubmit()) {
     const id = interaction.customId;
     if (id === 'postflow_caption_modal') return postFlow.handleCaptionSubmit;
+    if (id === 'postflow_textpost_modal') return postFlow.handleTextPostSubmit;
+    if (id.startsWith('postmgmt_editmodal_')) return postControls.handleEditModalSubmit;
     if (id === 'settings_boundaries_modal') return settings.handleBoundariesSubmit;
     if (id === 'apply_modal') return applyFlow.handleModalSubmit;
     if (id.startsWith('reqmodal_')) return requestFlow.handleModalSubmit;
@@ -120,7 +128,6 @@ function resolveHandler(interaction) {
     if (id === 'modsettings_eligibility_modal') return modSettings.handleEligibilitySubmit;
     if (id === 'modsettings_policy_modal') return modSettings.handlePolicySubmit;
     if (id.startsWith('modpanel_suspendmodal_')) return modPanel.handleSuspendSubmit;
-    if (id.startsWith('profeditmodal_')) return profile.handleEditCaptionSubmit;
     if (id.startsWith('introcustommodal_')) return introFlow.handleCustomModalSubmit;
     return null;
   }

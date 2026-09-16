@@ -6,6 +6,7 @@ const config = require('../config');
 const creatorRepo = require('../db/creatorRepository');
 const postRepo = require('../db/postRepository');
 const feedCard = require('./feedCard');
+const postControls = require('./postControls');
 const creatorSpace = require('../services/creatorSpace');
 const logger = require('../utils/logger');
 
@@ -74,6 +75,19 @@ async function handleNext(interaction) {
   const draft = drafts.get(interaction.user.id);
   if (!draft) return interaction.reply({ content: 'Session expired — click Post Content again.', ephemeral: true });
 
+  await interaction.update({
+    content: 'How do you want to post?',
+    components: [new ActionRowBuilder().addComponents(
+      new ButtonBuilder().setCustomId('postflow_kind_media').setLabel('Photo/Video').setEmoji('📷').setStyle(ButtonStyle.Primary),
+      new ButtonBuilder().setCustomId('postflow_kind_text').setLabel('Text Only').setEmoji('📝').setStyle(ButtonStyle.Secondary),
+    )],
+  });
+}
+
+async function chooseMediaKind(interaction) {
+  const draft = drafts.get(interaction.user.id);
+  if (!draft) return interaction.reply({ content: 'Session expired — click Post Content again.', ephemeral: true });
+
   const modal = new ModalBuilder().setCustomId('postflow_caption_modal').setTitle('Caption');
   const captionInput = new TextInputBuilder()
     .setCustomId('caption')
@@ -82,6 +96,21 @@ async function handleNext(interaction) {
     .setMaxLength(300)
     .setRequired(false);
   modal.addComponents(new ActionRowBuilder().addComponents(captionInput));
+  await interaction.showModal(modal);
+}
+
+async function chooseTextKind(interaction) {
+  const draft = drafts.get(interaction.user.id);
+  if (!draft) return interaction.reply({ content: 'Session expired — click Post Content again.', ephemeral: true });
+
+  const modal = new ModalBuilder().setCustomId('postflow_textpost_modal').setTitle('Text Post');
+  const textInput = new TextInputBuilder()
+    .setCustomId('text')
+    .setLabel('What do you want to say?')
+    .setStyle(TextInputStyle.Paragraph)
+    .setMaxLength(1000)
+    .setRequired(true);
+  modal.addComponents(new ActionRowBuilder().addComponents(textInput));
   await interaction.showModal(modal);
 }
 
@@ -133,7 +162,11 @@ async function handleCaptionSubmit(interaction) {
   });
 
   const { thread } = await creatorSpace.ensureCreatorThread(interaction.guild, interaction.member);
-  await thread.send({ content: draft.caption || undefined, files: [primary.url, ...rest.map((a) => a.url)] }).catch((err) => {
+  await thread.send({
+    content: draft.caption || undefined,
+    files: [primary.url, ...rest.map((a) => a.url)],
+    components: postControls.manageControlsRow(post),
+  }).catch((err) => {
     logger.warn(`Could not mirror post into creator thread for ${interaction.user.id}: ${err.message}`);
   });
 
@@ -147,4 +180,41 @@ async function handleCaptionSubmit(interaction) {
   await dmChannel.send('Posted! ✅ Check your space and the feed.');
 }
 
-module.exports = { start, setType, setRequests, handleNext, handleCaptionSubmit };
+// No DM step needed — there's no media to collect, so this creates the post
+// directly off the modal submit, same low-friction one-step flow the media
+// branch works toward via its DM roundtrip.
+async function handleTextPostSubmit(interaction) {
+  await interaction.deferReply({ ephemeral: true });
+  const draft = drafts.get(interaction.user.id);
+  if (!draft) return interaction.editReply({ content: 'Session expired — click Post Content again.' });
+
+  const text = interaction.fields.getTextInputValue('text');
+  const creator = await creatorRepo.findOrCreateCreator(interaction.user.id, interaction.guildId);
+  const post = await postRepo.createPost({
+    creatorId: creator.id,
+    guildId: interaction.guildId,
+    mediaUrl: null,
+    extraMediaUrls: [],
+    contentType: draft.contentType,
+    requestsOpen: draft.requestsOpen,
+    caption: text,
+  });
+
+  const { thread } = await creatorSpace.ensureCreatorThread(interaction.guild, interaction.member);
+  await thread.send({ content: text, components: postControls.manageControlsRow(post) }).catch((err) => {
+    logger.warn(`Could not mirror text post into creator thread for ${interaction.user.id}: ${err.message}`);
+  });
+
+  await feedCard.publishPost(interaction.guild, {
+    creatorTag: interaction.member.displayName,
+    avatarUrl: interaction.user.displayAvatarURL(),
+    post,
+  });
+
+  drafts.delete(interaction.user.id);
+  await interaction.editReply({ content: 'Posted! ✅ Check your space and the feed.' });
+}
+
+module.exports = {
+  start, setType, setRequests, handleNext, chooseMediaKind, chooseTextKind, handleCaptionSubmit, handleTextPostSubmit,
+};

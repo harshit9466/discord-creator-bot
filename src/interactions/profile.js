@@ -1,27 +1,17 @@
-const {
-  EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, ModalBuilder, TextInputBuilder, TextInputStyle,
-} = require('discord.js');
+const { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle } = require('discord.js');
 const config = require('../config');
 const creatorRepo = require('../db/creatorRepository');
 const postRepo = require('../db/postRepository');
-const feedCard = require('./feedCard');
 const { isImageUrl } = require('../utils/media');
-const forumDirectory = require('../services/forumDirectory');
-const logger = require('../utils/logger');
 
 const STATUS_LABELS = { ACTIVE: '🟢 Active', ON_BREAK: '🟡 On a Break', STEPPED_DOWN: '📦 Archived', SUSPENDED: '🚫 Suspended' };
 
-// creator-spaces threads stay creator-only (deliberate — see docs/), so this can
-// never link there. Instead it pages through the creator's real posts one at a
-// time, sourced from data the profile viewer already has, with a link to each
-// post's actual Feed message (which every member CAN see) rather than a text
-// summary with nowhere to click.
-//
-// isOwner adds Edit Caption / Delete controls to the current post — safe to do
-// without a separate ownership check on those buttons' handlers, because this
-// whole view is only ever shown as an ephemeral reply, which nobody but the
-// viewer who triggered it can even see, let alone click.
-async function buildProfilePage(guild, creator, index, isOwner = false) {
+// Read-only — editing/deleting your own posts happens in your creator-space
+// thread now (postControls.js), attached directly to each post as it's made, not
+// behind this view. creator-spaces threads stay creator-only (deliberate — see
+// docs/), so this is still how members see a creator's post history: paginated,
+// one post at a time, linking out to each post's actual Feed message.
+async function buildProfilePage(guild, creator, index) {
   const member = await guild.members.fetch(creator.discord_user_id).catch(() => null);
   const totalPosts = await postRepo.countByCreator(creator.id);
 
@@ -51,13 +41,12 @@ async function buildProfilePage(guild, creator, index, isOwner = false) {
       + `${extraCount ? ` · +${extraCount} more attached` : ''} · ${new Date(post.posted_at).toLocaleDateString()}`,
   });
 
-  const ownerSuffix = isOwner ? '1' : '0';
   const navRow = new ActionRowBuilder().addComponents(
     new ButtonBuilder()
-      .setCustomId(`profilepage_${creator.id}_${safeIndex - 1}_${ownerSuffix}`)
+      .setCustomId(`profilepage_${creator.id}_${safeIndex - 1}`)
       .setLabel('◀ Prev').setStyle(ButtonStyle.Secondary).setDisabled(safeIndex === 0),
     new ButtonBuilder()
-      .setCustomId(`profilepage_${creator.id}_${safeIndex + 1}_${ownerSuffix}`)
+      .setCustomId(`profilepage_${creator.id}_${safeIndex + 1}`)
       .setLabel('Next ▶').setStyle(ButtonStyle.Secondary).setDisabled(safeIndex >= totalPosts - 1),
   );
   if (post.feed_message_id) {
@@ -67,21 +56,13 @@ async function buildProfilePage(guild, creator, index, isOwner = false) {
         .setLabel('View in Feed').setStyle(ButtonStyle.Link),
     );
   }
-  if (!isImageUrl(post.media_url)) {
+  if (post.media_url && !isImageUrl(post.media_url)) {
     // Video/other media doesn't render via setImage() — the media itself is only
     // one click away via View in Feed above, so this is a courtesy, not a gap.
     embed.addFields({ name: '​', value: "_This post is a video — use 'View in Feed' to watch it._" });
   }
 
-  const components = [navRow];
-  if (isOwner) {
-    components.push(new ActionRowBuilder().addComponents(
-      new ButtonBuilder().setCustomId(`profedit_${post.id}_${creator.id}_${safeIndex}`).setLabel('Edit Caption').setEmoji('✏️').setStyle(ButtonStyle.Secondary),
-      new ButtonBuilder().setCustomId(`profdelstart_${post.id}_${creator.id}_${safeIndex}`).setLabel('Delete Post').setEmoji('🗑️').setStyle(ButtonStyle.Danger),
-    ));
-  }
-
-  return { embeds: [embed], components };
+  return { embeds: [embed], components: [navRow] };
 }
 
 async function showByCreatorId(interaction) {
@@ -89,8 +70,7 @@ async function showByCreatorId(interaction) {
   const creatorId = Number(interaction.customId.split('_')[1]);
   const creator = await creatorRepo.getCreatorById(creatorId);
   if (!creator) return interaction.editReply({ content: 'Creator not found.' });
-  const isOwner = creator.discord_user_id === interaction.user.id;
-  await interaction.editReply(await buildProfilePage(interaction.guild, creator, 0, isOwner));
+  await interaction.editReply(await buildProfilePage(interaction.guild, creator, 0));
 }
 
 async function showOwn(interaction) {
@@ -99,94 +79,15 @@ async function showOwn(interaction) {
   if (!creator) {
     return interaction.editReply({ content: "You don't have a creator profile yet — post something first, or apply for the role!" });
   }
-  await interaction.editReply(await buildProfilePage(interaction.guild, creator, 0, true));
+  await interaction.editReply(await buildProfilePage(interaction.guild, creator, 0));
 }
 
 async function changePage(interaction) {
   await interaction.deferUpdate();
-  const [, creatorIdStr, indexStr, ownerStr] = interaction.customId.split('_');
-  const creator = await creatorRepo.getCreatorById(Number(creatorIdStr));
-  if (!creator) return interaction.editReply({ content: 'Creator not found.', embeds: [], components: [] });
-  await interaction.editReply(await buildProfilePage(interaction.guild, creator, Number(indexStr), ownerStr === '1'));
-}
-
-async function showEditCaptionModal(interaction) {
-  const [, postIdStr, creatorIdStr, indexStr] = interaction.customId.split('_');
-  const post = await postRepo.getPost(Number(postIdStr));
-  const modal = new ModalBuilder().setCustomId(`profeditmodal_${postIdStr}_${creatorIdStr}_${indexStr}`).setTitle('Edit Caption');
-  const input = new TextInputBuilder()
-    .setCustomId('caption').setLabel('Caption').setStyle(TextInputStyle.Paragraph)
-    .setMaxLength(500).setRequired(false).setValue(post?.caption || '');
-  modal.addComponents(new ActionRowBuilder().addComponents(input));
-  await interaction.showModal(modal);
-}
-
-async function handleEditCaptionSubmit(interaction) {
-  await interaction.deferReply({ ephemeral: true });
-  const [, postIdStr, creatorIdStr, indexStr] = interaction.customId.split('_');
-  const postId = Number(postIdStr);
-  const caption = interaction.fields.getTextInputValue('caption');
-
-  const post = await postRepo.getPost(postId);
-  if (!post) return interaction.editReply({ content: 'Post not found.' });
-
-  await postRepo.updateCaption(postId, caption);
-
-  if (post.feed_message_id) {
-    // Reachable only via the owner's own (isOwner-gated) profile view, so
-    // interaction.user is guaranteed to be the post's creator here.
-    const updatedPost = await postRepo.getPost(postId);
-    await feedCard.refreshFeedMessage(interaction.guild, updatedPost, interaction.member.displayName, interaction.user.displayAvatarURL())
-      .catch((err) => logger.warn(`Could not refresh Feed message for edited post ${postId}: ${err.message}`));
-  }
-
-  const creator = await creatorRepo.getCreatorById(Number(creatorIdStr));
-  await interaction.editReply({ content: 'Caption updated.', ...(await buildProfilePage(interaction.guild, creator, Number(indexStr), true)) });
-}
-
-// Same second-confirmation pattern used everywhere else irreversible deletion
-// happens in this bot (Step Down > Delete, Mod Panel > Delete Creator).
-async function startDeletePost(interaction) {
-  const [, postIdStr, creatorIdStr, indexStr] = interaction.customId.split('_');
-  await interaction.update({
-    content: "⚠️ This permanently deletes this post from the Feed and can't be undone. Are you sure?",
-    embeds: [],
-    components: [new ActionRowBuilder().addComponents(
-      new ButtonBuilder().setCustomId(`profdelfinal_${postIdStr}_${creatorIdStr}_${indexStr}`).setLabel('Yes, delete it').setStyle(ButtonStyle.Danger),
-      new ButtonBuilder().setCustomId(`profdelcancel_${creatorIdStr}_${indexStr}`).setLabel('Cancel').setStyle(ButtonStyle.Secondary),
-    )],
-  });
-}
-
-async function cancelDeletePost(interaction) {
-  await interaction.deferUpdate();
   const [, creatorIdStr, indexStr] = interaction.customId.split('_');
   const creator = await creatorRepo.getCreatorById(Number(creatorIdStr));
   if (!creator) return interaction.editReply({ content: 'Creator not found.', embeds: [], components: [] });
-  await interaction.editReply(await buildProfilePage(interaction.guild, creator, Number(indexStr), true));
+  await interaction.editReply(await buildProfilePage(interaction.guild, creator, Number(indexStr)));
 }
 
-async function deletePostFinal(interaction) {
-  await interaction.deferUpdate();
-  const [, postIdStr, creatorIdStr, indexStr] = interaction.customId.split('_');
-  const post = await postRepo.getPost(Number(postIdStr));
-
-  if (post?.feed_message_id) {
-    const channel = await interaction.guild.channels.fetch(config.feedChannelId).catch(() => null);
-    const message = await channel?.messages.fetch(post.feed_message_id).catch(() => null);
-    // Deleting the message also removes its comment thread — Discord does this
-    // automatically for threads started from a message.
-    await message?.delete().catch((err) => logger.warn(`Could not delete Feed message for post ${postIdStr}: ${err.message}`));
-  }
-  await postRepo.deletePost(Number(postIdStr));
-  await forumDirectory.syncForumPost(interaction.guild, Number(creatorIdStr)).catch((err) => logger.warn(`Forum sync failed: ${err.message}`));
-
-  const creator = await creatorRepo.getCreatorById(Number(creatorIdStr));
-  if (!creator) return interaction.editReply({ content: 'Post deleted.', embeds: [], components: [] });
-  await interaction.editReply({ content: 'Post deleted.', ...(await buildProfilePage(interaction.guild, creator, Math.max(0, Number(indexStr) - 1), true)) });
-}
-
-module.exports = {
-  showByCreatorId, showOwn, changePage, buildProfilePage,
-  showEditCaptionModal, handleEditCaptionSubmit, startDeletePost, cancelDeletePost, deletePostFinal,
-};
+module.exports = { showByCreatorId, showOwn, changePage, buildProfilePage };

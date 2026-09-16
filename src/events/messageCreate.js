@@ -2,6 +2,7 @@ const config = require('../config');
 const creatorRepo = require('../db/creatorRepository');
 const postRepo = require('../db/postRepository');
 const feedCard = require('../interactions/feedCard');
+const postControls = require('../interactions/postControls');
 const memberActivityRepo = require('../db/memberActivityRepository');
 const guildSettingsRepo = require('../db/guildSettingsRepository');
 const logger = require('../utils/logger');
@@ -56,6 +57,13 @@ module.exports = {
       });
 
       await message.react('✅').catch(() => {});
+      // The creator's own message can't carry bot buttons, so management controls
+      // (edit caption, delete, remove one photo/video) go on a follow-up reply
+      // instead — same controls the button flow attaches directly to its own
+      // thread-mirror message.
+      await message.reply({ content: 'Manage this post:', components: postControls.manageControlsRow(post) }).catch((err) => {
+        logger.warn(`Could not send post-management controls for ${message.author.id}: ${err.message}`);
+      });
     } catch (err) {
       logger.error(`Native post mirror failed for ${message.author.id}:`, { error: err.message });
     }

@@ -50,7 +50,11 @@ async function initDb() {
       t.increments('id').primary();
       t.integer('creator_id').unsigned().notNullable().references('id').inTable('creators').onDelete('CASCADE');
       t.string('guild_id', 20).notNullable();
-      t.string('media_url', 500).notNullable();
+      // Nullable — a text-only post has no media_url at all (caption carries the
+      // content). A post must have at least one of media_url/caption; enforced in
+      // application code (postRepository.createPost), not a DB constraint, same as
+      // the rest of this schema's validation style.
+      t.string('media_url', 500);
       t.string('content_type', 10).notNullable(); // SFW | NSFW
       t.boolean('requests_open').notNullable().defaultTo(true);
       t.text('caption');
@@ -95,6 +99,22 @@ async function initDb() {
   if (!(await db.schema.hasColumn('posts', 'extra_media_urls'))) {
     await db.schema.alterTable('posts', (t) => {
       t.text('extra_media_urls');
+    });
+  }
+
+  // media_url started out NOT NULL; text-only posts need it nullable. DROP NOT
+  // NULL is idempotent (a harmless no-op if already nullable), so this runs
+  // unconditionally rather than needing an information_schema check first.
+  await db.schema.alterTable('posts', (t) => {
+    t.string('media_url', 500).nullable().alter();
+  });
+
+  // forum_mirror_message_id — the message this post was mirrored to inside the
+  // creator's own Forum directory thread (forumDirectory.mirrorPost), so deleting
+  // the post can clean that copy up too instead of leaving a stale mirror behind.
+  if (!(await db.schema.hasColumn('posts', 'forum_mirror_message_id'))) {
+    await db.schema.alterTable('posts', (t) => {
+      t.string('forum_mirror_message_id', 20);
     });
   }
 

@@ -2,6 +2,7 @@ const { ChannelType, EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle 
 const config = require('../config');
 const creatorRepo = require('../db/creatorRepository');
 const postRepo = require('../db/postRepository');
+const { buildPostCard, buildGalleryEmbeds, collectVideoFiles } = require('../utils/postCard');
 const logger = require('../utils/logger');
 
 // Optional feature: CREATOR_FORUM_CHANNEL_ID isn't in production yet (the channel
@@ -46,9 +47,13 @@ async function ensureTags(channel) {
   return updated.availableTags;
 }
 
+// Just the profile summary — every actual post gets mirrored as its own message
+// in this same thread (mirrorPost below), so the thread's own message history IS
+// the "all their media and text in one place" gallery. No "latest post" link
+// needed here anymore; scrolling the thread shows everything, oldest to newest,
+// and members can reply right there to talk to the creator.
 async function buildStarterPayload(guild, creator, member = null) {
   const resolvedMember = member || await guild.members.fetch(creator.discord_user_id).catch(() => null);
-  const [latest] = await postRepo.listRecentByCreator(creator.id, 1);
 
   const embed = new EmbedBuilder()
     .setAuthor({ name: resolvedMember?.displayName || `Creator #${creator.id}`, iconURL: resolvedMember?.displayAvatarURL() })
@@ -57,20 +62,13 @@ async function buildStarterPayload(guild, creator, member = null) {
       { name: 'Content', value: creator.default_content_type, inline: true },
       { name: 'Requests', value: creator.requests_open ? 'Open' : 'Closed', inline: true },
     )
-    .setColor(0xE91E8C);
+    .setColor(0xE91E8C)
+    .setFooter({ text: 'Every post they make shows up below — reply here to chat with them.' });
   if (creator.bio) embed.setDescription(creator.bio);
-  if (latest) embed.addFields({ name: 'Latest post', value: `<t:${Math.floor(new Date(latest.posted_at).getTime() / 1000)}:R>` });
 
   const row = new ActionRowBuilder().addComponents(
     new ButtonBuilder().setCustomId(`profile_${creator.id}`).setLabel('Profile').setEmoji('👤').setStyle(ButtonStyle.Secondary),
   );
-  if (latest?.feed_message_id) {
-    row.addComponents(
-      new ButtonBuilder()
-        .setURL(`https://discord.com/channels/${guild.id}/${config.feedChannelId}/${latest.feed_message_id}`)
-        .setLabel('Latest Post').setStyle(ButtonStyle.Link),
-    );
-  }
 
   return { embeds: [embed], components: [row] };
 }
@@ -159,6 +157,57 @@ async function syncForumPost(guild, creatorId) {
   }
 }
 
+// Mirrors one post's actual content (embeds + files, same rendering as the Feed
+// card) into the creator's own forum thread, right after it's published — this is
+// what turns that thread into a real "everything this creator has shared, in
+// order, in one place" gallery instead of just a status summary, and since it's a
+// normal Discord thread, members can reply right there to actually talk to them.
+async function mirrorPost(guild, post, creatorTag, avatarUrl) {
+  if (!config.creatorForumChannelId) return;
+  const creator = await creatorRepo.getCreatorById(post.creator_id);
+  if (!creator?.forum_post_id) return;
+
+  const thread = await guild.channels.fetch(creator.forum_post_id).catch(() => null);
+  if (!thread) return;
+  const wasArchived = thread.archived;
+  if (wasArchived) await thread.setArchived(false).catch(() => {});
+
+  const message = await thread.send({
+    embeds: [buildPostCard({ creatorTag, avatarUrl, post }), ...buildGalleryEmbeds(post)],
+    files: collectVideoFiles(post),
+  });
+  await postRepo.setForumMirrorMessageId(post.id, message.id);
+
+  if (wasArchived) await thread.setArchived(true).catch(() => {});
+}
+
+// Re-renders a post's mirrored copy in place after a caption edit or a single
+// media item being removed — same "edit, don't resend" pattern as
+// feedCard.refreshFeedMessage, just targeting the forum thread's copy instead.
+async function refreshMirroredPost(guild, post, creatorTag, avatarUrl) {
+  if (!config.creatorForumChannelId || !post?.forum_mirror_message_id) return;
+  const creator = await creatorRepo.getCreatorById(post.creator_id);
+  if (!creator?.forum_post_id) return;
+  const thread = await guild.channels.fetch(creator.forum_post_id).catch(() => null);
+  if (!thread) return;
+  const message = await thread.messages.fetch(post.forum_mirror_message_id).catch(() => null);
+  await message?.edit({ embeds: [buildPostCard({ creatorTag, avatarUrl, post }), ...buildGalleryEmbeds(post)] })
+    .catch((err) => logger.warn(`Could not refresh forum mirror for post ${post.id}: ${err.message}`));
+}
+
+// Cleans up a post's mirrored copy when the post itself gets deleted (or loses its
+// last media item down to nothing — see postRepository.removeMediaItem) — takes
+// the already-fetched post row, same reasoning as deleteForumPost below.
+async function deleteMirroredPost(guild, post) {
+  if (!config.creatorForumChannelId || !post?.forum_mirror_message_id) return;
+  const creator = await creatorRepo.getCreatorById(post.creator_id);
+  if (!creator?.forum_post_id) return;
+  const thread = await guild.channels.fetch(creator.forum_post_id).catch(() => null);
+  if (!thread) return;
+  const message = await thread.messages.fetch(post.forum_mirror_message_id).catch(() => null);
+  await message?.delete().catch((err) => logger.warn(`Could not delete forum mirror for post ${post.id}: ${err.message}`));
+}
+
 // Takes the already-fetched creator row, not a creatorId — this always runs right
 // before creatorRepo.deleteCreator(), so the row won't exist to re-fetch by then.
 async function deleteForumPost(guild, creator) {
@@ -167,4 +216,4 @@ async function deleteForumPost(guild, creator) {
   await post?.delete().catch((err) => logger.warn(`Could not delete forum post for creator ${creator.id}: ${err.message}`));
 }
 
-module.exports = { ensureForumPost, syncForumPost, deleteForumPost };
+module.exports = { ensureForumPost, syncForumPost, mirrorPost, refreshMirroredPost, deleteMirroredPost, deleteForumPost };

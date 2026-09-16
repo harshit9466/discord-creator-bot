@@ -25,6 +25,36 @@ async function ensureCreatorThread(guild, member) {
   return promise;
 }
 
+// Extracted so both a fresh thread (provisionThread) and the one-time
+// refreshWelcomeMessages.js repair script build the exact same content — the
+// welcome message text/buttons have changed several times as features were added
+// (boundaries button, then the intro button), and threads created under an older
+// version never got the update automatically since nothing re-sends a pinned
+// message just because its source template changed.
+function buildWelcomeMessage(creator, member) {
+  return {
+    content:
+      `🎬 <@${member.id}>'s space — welcome, you're a creator now! 🎉\n\n` +
+      "Here's everything in one place:\n\n" +
+      '📸 **Posting** — two ways, whichever you like:\n' +
+      '• Drop a photo/video right here with a caption, just like any normal channel — it shows up in the Feed automatically.\n' +
+      `• Or click Post Content in <#${config.homeChannelId}> if you'd rather be guided step by step.\n\n` +
+      '📢 **The Feed** — every post you make (either way) gets mirrored there, so people can find you without needing to know this thread exists.\n\n' +
+      "📨 **Requests** — members can request specific content from you. Whatever boundaries you set are shown to them *before* they can send anything, so you never have to repeat yourself.\n\n" +
+      '👤 **Profile** — anyone can check your status and recent posts from the Feed.\n\n' +
+      `⚙️ **Settings** (in <#${config.homeChannelId}>) — update your boundaries anytime, take a break (your content stays up, requests pause, I'll check in when you're ready to return), or step down whenever — archive (reversible) or delete (permanent), your call.\n\n` +
+      "A couple things worth doing right now:",
+    components: [
+      new ActionRowBuilder().addComponents(
+        new ButtonBuilder().setCustomId(`onboard_boundaries_${creator.id}`).setLabel('Set My Boundaries').setEmoji('📝').setStyle(ButtonStyle.Primary),
+      ),
+      new ActionRowBuilder().addComponents(
+        new ButtonBuilder().setCustomId(`introstart_${creator.id}`).setLabel('Introduce Me in the Feed').setEmoji('📣').setStyle(ButtonStyle.Secondary),
+      ),
+    ],
+  };
+}
+
 async function provisionThread(guild, member) {
   const creator = await creatorRepo.findOrCreateCreator(member.id, guild.id);
 
@@ -48,27 +78,7 @@ async function provisionThread(guild, member) {
     reason: 'Creator space provisioned on role grant',
   });
 
-  const welcome = await thread.send({
-    content:
-      `🎬 <@${member.id}>'s space — welcome, you're a creator now! 🎉\n\n` +
-      "Here's everything in one place:\n\n" +
-      '📸 **Posting** — two ways, whichever you like:\n' +
-      '• Drop a photo/video right here with a caption, just like any normal channel — it shows up in the Feed automatically.\n' +
-      `• Or click Post Content in <#${config.homeChannelId}> if you'd rather be guided step by step.\n\n` +
-      '📢 **The Feed** — every post you make (either way) gets mirrored there, so people can find you without needing to know this thread exists.\n\n' +
-      "📨 **Requests** — members can request specific content from you. Whatever boundaries you set are shown to them *before* they can send anything, so you never have to repeat yourself.\n\n" +
-      '👤 **Profile** — anyone can check your status and recent posts from the Feed.\n\n' +
-      `⚙️ **Settings** (in <#${config.homeChannelId}>) — update your boundaries anytime, take a break (your content stays up, requests pause, I'll check in when you're ready to return), or step down whenever — archive (reversible) or delete (permanent), your call.\n\n` +
-      "A couple things worth doing right now:",
-    components: [
-      new ActionRowBuilder().addComponents(
-        new ButtonBuilder().setCustomId(`onboard_boundaries_${creator.id}`).setLabel('Set My Boundaries').setEmoji('📝').setStyle(ButtonStyle.Primary),
-      ),
-      new ActionRowBuilder().addComponents(
-        new ButtonBuilder().setCustomId(`introstart_${creator.id}`).setLabel('Introduce Me in the Feed').setEmoji('📣').setStyle(ButtonStyle.Secondary),
-      ),
-    ],
-  });
+  const welcome = await thread.send(buildWelcomeMessage(creator, member));
   await welcome.pin().catch(() => {});
 
   await creatorRepo.setThreadId(creator.id, thread.id);
@@ -77,4 +87,4 @@ async function provisionThread(guild, member) {
   return { creator: { ...creator, thread_id: thread.id }, thread };
 }
 
-module.exports = { ensureCreatorThread };
+module.exports = { ensureCreatorThread, buildWelcomeMessage };

@@ -13,7 +13,7 @@ module.exports = {
 
     try {
       const { creator } = await creatorSpace.ensureCreatorThread(newMember.guild, newMember);
-      await forumDirectory.ensureForumPost(newMember.guild, creator);
+      await forumDirectory.ensureForumPost(newMember.guild, creator, newMember);
     } catch (err) {
       logger.error(`Failed to provision creator thread for ${newMember.id}:`, { error: err.message });
     }

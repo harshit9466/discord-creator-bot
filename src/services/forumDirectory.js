@@ -46,12 +46,12 @@ async function ensureTags(channel) {
   return updated.availableTags;
 }
 
-async function buildStarterPayload(guild, creator) {
-  const member = await guild.members.fetch(creator.discord_user_id).catch(() => null);
+async function buildStarterPayload(guild, creator, member = null) {
+  const resolvedMember = member || await guild.members.fetch(creator.discord_user_id).catch(() => null);
   const [latest] = await postRepo.listRecentByCreator(creator.id, 1);
 
   const embed = new EmbedBuilder()
-    .setAuthor({ name: member?.displayName || `Creator #${creator.id}`, iconURL: member?.displayAvatarURL() })
+    .setAuthor({ name: resolvedMember?.displayName || `Creator #${creator.id}`, iconURL: resolvedMember?.displayAvatarURL() })
     .addFields(
       { name: 'Status', value: STATUS_LABELS[creator.status] || creator.status, inline: true },
       { name: 'Content', value: creator.default_content_type, inline: true },
@@ -81,16 +81,19 @@ async function buildStarterPayload(guild, creator) {
 // create is an external side effect a DB upsert alone can't deduplicate.
 const inFlight = new Map();
 
-async function ensureForumPost(guild, creator) {
+// `member` is optional — pass it when the caller already fetched it (applyFlow.js,
+// guildMemberUpdate.js both do, right before calling this) to skip a second,
+// redundant Discord API round-trip for the same data.
+async function ensureForumPost(guild, creator, member = null) {
   if (!config.creatorForumChannelId) return null;
   const key = `${guild.id}:${creator.discord_user_id}`;
   if (inFlight.has(key)) return inFlight.get(key);
-  const promise = provisionForumPost(guild, creator).finally(() => inFlight.delete(key));
+  const promise = provisionForumPost(guild, creator, member).finally(() => inFlight.delete(key));
   inFlight.set(key, promise);
   return promise;
 }
 
-async function provisionForumPost(guild, creator) {
+async function provisionForumPost(guild, creator, member) {
   const channel = await guild.channels.fetch(config.creatorForumChannelId).catch(() => null);
   if (!channel || channel.type !== ChannelType.GuildForum) {
     logger.error('CREATOR_FORUM_CHANNEL_ID is not set to a real Forum channel — skipping directory post');
@@ -109,12 +112,14 @@ async function provisionForumPost(guild, creator) {
     }
   }
 
-  const availableTags = await ensureTags(channel);
-  const member = await guild.members.fetch(creator.discord_user_id).catch(() => null);
-  const { embeds, components } = await buildStarterPayload(guild, creator);
+  const resolvedMember = member || await guild.members.fetch(creator.discord_user_id).catch(() => null);
+  const [availableTags, { embeds, components }] = await Promise.all([
+    ensureTags(channel),
+    buildStarterPayload(guild, creator, resolvedMember),
+  ]);
 
   const post = await channel.threads.create({
-    name: (member?.displayName || `Creator #${creator.id}`).slice(0, 90),
+    name: (resolvedMember?.displayName || `Creator #${creator.id}`).slice(0, 90),
     message: { embeds, components },
     appliedTags: tagIdsFor(availableTags, creator),
     reason: 'Creator directory post provisioned',

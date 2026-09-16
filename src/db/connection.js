@@ -13,7 +13,12 @@ const db = knexFactory({
         ssl: process.env.DATABASE_URL?.includes('.railway.internal') ? false : { rejectUnauthorized: false },
       },
   useNullAsDefault: client === 'sqlite3',
-  pool: { min: 0, max: 10 },
+  // min: 1 keeps one connection alive between bursts of activity — with min: 0,
+  // every request after a quiet gap had to pay a full fresh TCP+TLS+auth handshake
+  // to Neon on top of the query's own round-trip, which was part of what made the
+  // bot feel slow after idle periods. The cost is one small idle connection instead
+  // of zero; negligible next to the fixed 0.25 CU compute this project already runs.
+  pool: { min: client === 'sqlite3' ? 0 : 1, max: 10 },
 });
 
 async function initDb() {

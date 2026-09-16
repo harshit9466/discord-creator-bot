@@ -215,9 +215,18 @@ async function handleModDecision(interaction) {
   if (!application) return interaction.followUp({ content: 'Application not found.', ephemeral: true });
 
   if (action === 'approve') {
-    await applicationRepo.decide(applicationId, 'APPROVED', interaction.user.id);
     const member = await interaction.guild.members.fetch(application.discord_user_id).catch(() => null);
-    if (member) await member.roles.add(config.creatorRoleId).catch((err) => logger.error(`Role assign failed: ${err.message}`));
+
+    // Everything below this point that doesn't depend on the others' *output* now
+    // runs concurrently instead of one-await-at-a-time — this handler used to chain
+    // ~10 sequential network round-trips (DB writes + Discord API calls), which is
+    // exactly what made approving a creator the slowest interaction in the bot.
+    // Role-add, thread/creator provisioning, and the DM are mutually independent
+    // (none needs another's result), so Promise.all collapses their latency to
+    // roughly the slowest single one instead of the sum of all three.
+    const roleAddPromise = member
+      ? member.roles.add(config.creatorRoleId).catch((err) => logger.error(`Role assign failed: ${err.message}`))
+      : Promise.resolve();
 
     // Provisioned directly here rather than left to guildMemberUpdate alone: that
     // listener does fire correctly for this role add, but relying on it exclusively
@@ -226,28 +235,37 @@ async function handleModDecision(interaction) {
     // ensureCreatorThread() now holds a per-member in-flight lock — see
     // docs/incident-2026-09-15-duplicate-thread-race.md for why that lock exists;
     // without it, this deliberate double-call would recreate that exact bug.
-    const { creator } = member
-      ? await creatorSpace.ensureCreatorThread(interaction.guild, member)
-      : { creator: await creatorRepo.findOrCreateCreator(application.discord_user_id, application.guild_id) };
-    if (member) await forumDirectory.ensureForumPost(interaction.guild, creator);
+    const provisionPromise = member
+      ? creatorSpace.ensureCreatorThread(interaction.guild, member)
+      : creatorRepo.findOrCreateCreator(application.discord_user_id, application.guild_id).then((c) => ({ creator: c }));
 
-    // Real bug, found from an actual re-approval: this never reset creator.status,
-    // so someone previously archived and then re-approved kept status STEPPED_DOWN
-    // forever — they had the role back but the system still considered them
-    // archived, which is also why their thread stayed archived (ensureCreatorThread
-    // found an old thread_id and, before the fix above, returned it as-is).
-    // reactivate() is the same reset statusFlow.reactivate/modPanel.liftSuspension
-    // already use, so this covers a re-approval from ANY prior status, not just
-    // STEPPED_DOWN.
-    await creatorRepo.reactivate(creator.id);
+    const dmPromise = interaction.client.users.fetch(application.discord_user_id)
+      .then((user) => user.send("🎉 You're approved as a creator! Check the server — your space is ready."))
+      .catch((err) => logger.warn(`Could not DM approved applicant: ${err.message}`));
 
+    const [, { creator }] = await Promise.all([
+      applicationRepo.decide(applicationId, 'APPROVED', interaction.user.id),
+      provisionPromise,
+      roleAddPromise,
+      dmPromise,
+    ]);
+
+    // These three DO depend on `creator` existing, but not on each other — same
+    // parallelization reasoning as above.
     const defaultType = application.content_comfort === 'NSFW' ? 'NSFW' : 'SFW';
-    await creatorRepo.setDefaultContentType(creator.id, defaultType);
-
-    try {
-      const user = await interaction.client.users.fetch(application.discord_user_id);
-      await user.send("🎉 You're approved as a creator! Check the server — your space is ready.");
-    } catch (err) { logger.warn(`Could not DM approved applicant: ${err.message}`); }
+    await Promise.all([
+      // Real bug, found from an actual re-approval: this never reset creator.status,
+      // so someone previously archived and then re-approved kept status STEPPED_DOWN
+      // forever — they had the role back but the system still considered them
+      // archived, which is also why their thread stayed archived (ensureCreatorThread
+      // found an old thread_id and, before the fix above, returned it as-is).
+      // reactivate() is the same reset statusFlow.reactivate/modPanel.liftSuspension
+      // already use, so this covers a re-approval from ANY prior status, not just
+      // STEPPED_DOWN.
+      creatorRepo.reactivate(creator.id),
+      creatorRepo.setDefaultContentType(creator.id, defaultType),
+      member ? forumDirectory.ensureForumPost(interaction.guild, creator, member) : Promise.resolve(),
+    ]);
   } else {
     await applicationRepo.decide(applicationId, 'DENIED', interaction.user.id);
     try {

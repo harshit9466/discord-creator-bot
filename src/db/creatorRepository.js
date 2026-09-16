@@ -30,6 +30,10 @@ async function setThreadId(creatorId, threadId) {
   return db('creators').where({ id: creatorId }).update({ thread_id: threadId });
 }
 
+async function setForumPostId(creatorId, forumPostId) {
+  return db('creators').where({ id: creatorId }).update({ forum_post_id: forumPostId });
+}
+
 async function updateBoundaries(creatorId, boundaries) {
   return db('creators').where({ id: creatorId }).update({ boundaries });
 }
@@ -93,7 +97,7 @@ async function getCreatorsOnBreakPastReturn() {
 }
 
 module.exports = {
-  findOrCreateCreator, getCreatorById, getCreatorByDiscordId, getCreatorByThreadId, setThreadId,
+  findOrCreateCreator, getCreatorById, getCreatorByDiscordId, getCreatorByThreadId, setThreadId, setForumPostId,
   updateBoundaries, setDefaultContentType, markApproved, setIntroPosted, setOnBreak, clearBreakReturn,
   reactivate, stepDown, suspend, deleteCreator, listByGuild, getCreatorsOnBreakPastReturn,
 };

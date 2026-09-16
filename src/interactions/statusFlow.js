@@ -1,6 +1,7 @@
 const { ActionRowBuilder, ButtonBuilder, ButtonStyle } = require('discord.js');
 const config = require('../config');
 const creatorRepo = require('../db/creatorRepository');
+const forumDirectory = require('../services/forumDirectory');
 const logger = require('../utils/logger');
 
 const DURATIONS = {
@@ -38,6 +39,7 @@ async function setBreakDuration(interaction) {
   const creator = await creatorRepo.getCreatorByDiscordId(interaction.user.id, interaction.guildId);
   if (!creator) return interaction.editReply({ content: 'No creator profile found.', components: [] });
   await creatorRepo.setOnBreak(creator.id, returnAt);
+  await forumDirectory.syncForumPost(interaction.guild, creator.id).catch((err) => logger.warn(`Forum sync failed: ${err.message}`));
 
   await interaction.editReply({
     content: returnAt
@@ -76,6 +78,7 @@ async function archiveStepDown(interaction) {
     const thread = await interaction.guild.channels.fetch(creator.thread_id).catch(() => null);
     await thread?.setArchived(true).catch(() => {});
   }
+  await forumDirectory.syncForumPost(interaction.guild, creator.id).catch((err) => logger.warn(`Forum sync failed: ${err.message}`));
 
   await interaction.editReply({
     content: '📦 Archived. Everything is kept — reactivate anytime from My Settings and it all comes back.',
@@ -104,6 +107,7 @@ async function deleteStepDown(interaction) {
     const thread = await interaction.guild.channels.fetch(creator.thread_id).catch(() => null);
     await thread?.delete().catch(() => {});
   }
+  await forumDirectory.deleteForumPost(interaction.guild, creator).catch((err) => logger.warn(`Forum post delete failed: ${err.message}`));
   await creatorRepo.deleteCreator(creator.id); // cascades: posts, likes, requests all go with it
 
   await interaction.editReply({
@@ -129,6 +133,7 @@ async function reactivate(interaction) {
       await thread?.setArchived(false).catch(() => {});
     }
   }
+  await forumDirectory.syncForumPost(interaction.guild, creator.id).catch((err) => logger.warn(`Forum sync failed: ${err.message}`));
 
   await interaction.editReply({ content: "🟢 Welcome back! You're active again.", components: [] });
 }
@@ -157,6 +162,10 @@ async function handleCheckinBack(interaction) {
   await interaction.deferUpdate();
   const creatorId = Number(interaction.customId.split('_')[2]);
   await creatorRepo.reactivate(creatorId);
+  // DM context — interaction.guild is null here, unlike every other handler in
+  // this file, so the guild has to be fetched explicitly for the forum sync.
+  const guild = await interaction.client.guilds.fetch(config.guildId).catch(() => null);
+  if (guild) await forumDirectory.syncForumPost(guild, creatorId).catch((err) => logger.warn(`Forum sync failed: ${err.message}`));
   await interaction.editReply({ content: "🟢 Welcome back! You're active again.", components: [] });
 }
 

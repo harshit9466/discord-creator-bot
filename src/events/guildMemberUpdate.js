@@ -1,5 +1,6 @@
 const config = require('../config');
 const creatorSpace = require('../services/creatorSpace');
+const forumDirectory = require('../services/forumDirectory');
 const logger = require('../utils/logger');
 
 module.exports = {
@@ -11,7 +12,8 @@ module.exports = {
     if (hadRole || !hasRole) return; // only act on the ADD transition
 
     try {
-      await creatorSpace.ensureCreatorThread(newMember.guild, newMember);
+      const { creator } = await creatorSpace.ensureCreatorThread(newMember.guild, newMember);
+      await forumDirectory.ensureForumPost(newMember.guild, creator);
     } catch (err) {
       logger.error(`Failed to provision creator thread for ${newMember.id}:`, { error: err.message });
     }

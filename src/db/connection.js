@@ -75,6 +75,14 @@ async function initDb() {
     });
   }
 
+  // forum_post_id — the member-facing creator directory's Discord Forum post for
+  // this creator (see forumDirectory.js). Same after-the-fact ALTER story.
+  if (!(await db.schema.hasColumn('creators', 'forum_post_id'))) {
+    await db.schema.alterTable('creators', (t) => {
+      t.string('forum_post_id', 20);
+    });
+  }
+
   // extra_media_urls was added after the posts table already existed in production
   // (Neon) — the createTable block above only runs on a brand-new DB, so this ALTER
   // is what actually gets the column onto the live table. Idempotent: on a fresh DB

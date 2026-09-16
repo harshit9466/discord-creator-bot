@@ -8,6 +8,7 @@ const applicationRepo = require('../db/applicationRepository');
 const memberActivityRepo = require('../db/memberActivityRepository');
 const guildSettingsRepo = require('../db/guildSettingsRepository');
 const creatorSpace = require('../services/creatorSpace');
+const forumDirectory = require('../services/forumDirectory');
 const logger = require('../utils/logger');
 
 const drafts = new Map(); // userId -> { contentComfort, frequency, policyAccepted, tenureDays, postCount }
@@ -228,6 +229,7 @@ async function handleModDecision(interaction) {
     const { creator } = member
       ? await creatorSpace.ensureCreatorThread(interaction.guild, member)
       : { creator: await creatorRepo.findOrCreateCreator(application.discord_user_id, application.guild_id) };
+    if (member) await forumDirectory.ensureForumPost(interaction.guild, creator);
 
     // Real bug, found from an actual re-approval: this never reset creator.status,
     // so someone previously archived and then re-approved kept status STEPPED_DOWN

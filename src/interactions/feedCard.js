@@ -2,6 +2,8 @@ const { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle } = require('
 const postRepo = require('../db/postRepository');
 const config = require('../config');
 const { isImageUrl } = require('../utils/media');
+const forumDirectory = require('../services/forumDirectory');
+const logger = require('../utils/logger');
 
 function getCardColor(post) {
   return post.content_type === 'NSFW' ? 0xE0245E : 0x43B581;
@@ -56,6 +58,7 @@ async function publishPost(guild, { creatorTag, avatarUrl, post }) {
   await postRepo.setFeedMessageId(post.id, message.id);
   await message.react('❤️').catch(() => {});
   await message.startThread({ name: `Comments — ${creatorTag}`, autoArchiveDuration: 1440 }).catch(() => {});
+  await forumDirectory.syncForumPost(guild, post.creator_id).catch((err) => logger.warn(`Forum sync failed: ${err.message}`));
   return message;
 }
 

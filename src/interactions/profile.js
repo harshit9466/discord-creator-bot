@@ -6,6 +6,7 @@ const creatorRepo = require('../db/creatorRepository');
 const postRepo = require('../db/postRepository');
 const feedCard = require('./feedCard');
 const { isImageUrl } = require('../utils/media');
+const forumDirectory = require('../services/forumDirectory');
 const logger = require('../utils/logger');
 
 const STATUS_LABELS = { ACTIVE: '🟢 Active', ON_BREAK: '🟡 On a Break', STEPPED_DOWN: '📦 Archived', SUSPENDED: '🚫 Suspended' };
@@ -178,6 +179,7 @@ async function deletePostFinal(interaction) {
     await message?.delete().catch((err) => logger.warn(`Could not delete Feed message for post ${postIdStr}: ${err.message}`));
   }
   await postRepo.deletePost(Number(postIdStr));
+  await forumDirectory.syncForumPost(interaction.guild, Number(creatorIdStr)).catch((err) => logger.warn(`Forum sync failed: ${err.message}`));
 
   const creator = await creatorRepo.getCreatorById(Number(creatorIdStr));
   if (!creator) return interaction.editReply({ content: 'Post deleted.', embeds: [], components: [] });

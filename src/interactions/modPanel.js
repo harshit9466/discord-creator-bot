@@ -10,6 +10,7 @@ const reportRepo = require('../db/conductReportRepository');
 const requestRepo = require('../db/requestRepository');
 const modRoster = require('./modRoster');
 const modSettings = require('./modSettings');
+const forumDirectory = require('../services/forumDirectory');
 const logger = require('../utils/logger');
 
 const STATUS_LABELS = { ACTIVE: '🟢 Active', ON_BREAK: '🟡 On a Break', STEPPED_DOWN: '📦 Archived', SUSPENDED: '🚫 Suspended' };
@@ -163,6 +164,7 @@ async function handleSuspendSubmit(interaction) {
     const thread = await interaction.guild.channels.fetch(creator.thread_id).catch(() => null);
     await thread?.setArchived(true).catch(() => {});
   }
+  await forumDirectory.syncForumPost(interaction.guild, creatorId).catch((err) => logger.warn(`Forum sync failed: ${err.message}`));
   try {
     const user = await interaction.client.users.fetch(creator.discord_user_id);
     await user.send(`🚫 You've been suspended as a creator.\n**Reason:** ${reason}\n\nA mod needs to lift this before you can be reactivated.`);
@@ -188,6 +190,7 @@ async function liftSuspension(interaction) {
     const thread = await interaction.guild.channels.fetch(creator.thread_id).catch(() => null);
     await thread?.setArchived(false).catch(() => {});
   }
+  await forumDirectory.syncForumPost(interaction.guild, creatorId).catch((err) => logger.warn(`Forum sync failed: ${err.message}`));
   try {
     const user = await interaction.client.users.fetch(creator.discord_user_id);
     await user.send("✅ Your suspension has been lifted — you're an active creator again.");
@@ -210,6 +213,7 @@ async function archiveCreator(interaction) {
     const thread = await interaction.guild.channels.fetch(creator.thread_id).catch(() => null);
     await thread?.setArchived(true).catch(() => {});
   }
+  await forumDirectory.syncForumPost(interaction.guild, creatorId).catch((err) => logger.warn(`Forum sync failed: ${err.message}`));
   try {
     const user = await interaction.client.users.fetch(creator.discord_user_id);
     await user.send('📦 A mod archived your creator profile. Everything is kept — you can reactivate anytime from My Settings.');
@@ -253,6 +257,7 @@ async function deleteFinal(interaction) {
     const thread = await interaction.guild.channels.fetch(creator.thread_id).catch(() => null);
     await thread?.delete().catch(() => {});
   }
+  await forumDirectory.deleteForumPost(interaction.guild, creator).catch((err) => logger.warn(`Forum post delete failed: ${err.message}`));
   try {
     const user = await interaction.client.users.fetch(creator.discord_user_id);
     await user.send('🗑️ A mod removed your creator profile and content.');

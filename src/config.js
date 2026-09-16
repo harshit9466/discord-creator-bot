@@ -10,6 +10,11 @@ module.exports = {
   feedChannelId: required('FEED_CHANNEL_ID'),
   creatorSpacesChannelId: required('CREATOR_SPACES_CHANNEL_ID'),
   modReviewChannelId: required('MOD_REVIEW_CHANNEL_ID'),
+  // Optional — the member-facing creator directory (forumDirectory.js) only works
+  // once this points at a real Discord Forum channel, created manually the same
+  // way every other channel here is (this bot never creates its own channels).
+  // Left unset, every forumDirectory call is a silent no-op — nothing else changes.
+  creatorForumChannelId: process.env.CREATOR_FORUM_CHANNEL_ID || null,
   creatorRoleId: required('CREATOR_ROLE_ID'),
   modRoleId: required('MOD_ROLE_ID'),
 
